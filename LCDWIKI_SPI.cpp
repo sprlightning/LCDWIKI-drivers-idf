@@ -934,7 +934,7 @@ uint16_t LCDWIKI_SPI::Read_ID(void)
 }
 
 //set x,y  coordinate and color to draw a pixel point 
-void LCDWIKI_SPI::Draw_Pixe(int16_t x, int16_t y, uint16_t color)
+void LCDWIKI_SPI::Draw_Pixel(int16_t x, int16_t y, uint16_t color)
 {
 	if((x < 0) || (y < 0) || (x > Get_Width()) || (y > Get_Height()))
 	{
@@ -1015,7 +1015,7 @@ void LCDWIKI_SPI::Fill_Rect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t
 		{
 			for(j=0;j<w;j++)
 			{
-				Draw_Pixe(x+j, y+i,color);
+				Draw_Pixel(x+j, y+i,color);
 			}		
 		}
 		CS_IDLE;
@@ -1383,11 +1383,11 @@ void LCDWIKI_SPI::SH1106_Draw_Bitmap(uint8_t x,uint8_t y,uint8_t width, uint8_t 
 				{
 					if(tmp&0x01)
 					{
-						Draw_Pixe(x+j, y+i*8+k,1);
+						Draw_Pixel(x+j, y+i*8+k,1);
 					}
 					else
 					{
-						Draw_Pixe(x+j, y+i*8+k,0);
+						Draw_Pixel(x+j, y+i*8+k,0);
 					}
 					tmp>>=1;
 				}
