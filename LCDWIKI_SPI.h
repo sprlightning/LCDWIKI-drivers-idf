@@ -69,7 +69,7 @@ class LCDWIKI_SPI:public LCDWIKI_GUI
 	void Init_LCD(void);
 	void reset(void);
 	void start(uint16_t ID);
-	void Draw_Pixe(int16_t x, int16_t y, uint16_t color);
+	void Draw_Pixel(int16_t x, int16_t y, uint16_t color);
 	void Spi_Write(uint8_t data);
 	uint8_t Spi_Read(void);
 	void Write_Cmd(uint16_t cmd);
