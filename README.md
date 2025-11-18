@@ -15,6 +15,7 @@ This library support these lcd controller:
 - ILI9486 
 - ST7735S 
 - SSD1283A
+- ST7789
 
 Check out the file of LCDWIKI SPI lib Requirements for our tutorials and wiring diagrams.
 
