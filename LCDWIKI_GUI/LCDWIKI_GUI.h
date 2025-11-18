@@ -4,7 +4,8 @@
 #if ARDUINO >= 100
 #include "Arduino.h"
 #else
-#include "WProgram.h"
+// #include "WProgram.h"
+#include "NeverUseArduino.h"
 #endif
 
 #ifdef __AVR__
@@ -73,15 +74,15 @@ class LCDWIKI_GUI
 	uint16_t Get_Text_Back_colour(void) const;
 	void Set_Text_Size(uint8_t s);
 	uint8_t Get_Text_Size(void) const;
-	void Set_Text_Mode(boolean mode);
-	boolean Get_Text_Mode(void) const;
+	void Set_Text_Mode(bool mode);
+	bool Get_Text_Mode(void) const;
 	size_t Print(uint8_t *st, int16_t x, int16_t y);
 	void Print_String(const uint8_t *st, int16_t x, int16_t y);
 	void Print_String(uint8_t *st, int16_t x, int16_t y);
-	void Print_String(String st, int16_t x, int16_t y);
+	void Print_String(const char* st, int16_t x, int16_t y);
 	void Print_Number_Int(long num, int16_t x, int16_t y, int16_t length, uint8_t filler, int16_t system);
 	void Print_Number_Float(double num, uint8_t dec, int16_t x, int16_t y, uint8_t divider, int16_t length, uint8_t filler);
-    void Draw_Char(int16_t x, int16_t y, uint8_t c, uint16_t color,uint16_t bg, uint8_t size, boolean mode);
+    void Draw_Char(int16_t x, int16_t y, uint8_t c, uint16_t color,uint16_t bg, uint8_t size, bool mode);
 	size_t write(uint8_t c);
 	int16_t Get_Display_Width(void) const;
 	int16_t Get_Display_Height(void) const; 
@@ -89,7 +90,7 @@ class LCDWIKI_GUI
 	int16_t text_x, text_y;
 	uint16_t text_color, text_bgcolor,draw_color;
 	uint8_t text_size;
-	boolean text_mode; //if set,text_bgcolor is invalid
+	bool text_mode; //if set,text_bgcolor is invalid
 };
 
 #endif

@@ -536,19 +536,19 @@ uint8_t LCDWIKI_GUI::Get_Text_Size(void) const
 }
 
 //set text mode
-void LCDWIKI_GUI::Set_Text_Mode(boolean mode)
+void LCDWIKI_GUI::Set_Text_Mode(bool mode)
 {
 	text_mode = mode;
 }
 
 //get text mode
-boolean LCDWIKI_GUI::Get_Text_Mode(void) const
+bool LCDWIKI_GUI::Get_Text_Mode(void) const
 {
 	return text_mode;
 }
 
 //draw a char
-void LCDWIKI_GUI::Draw_Char(int16_t x, int16_t y, uint8_t c, uint16_t color,uint16_t bg, uint8_t size, boolean mode)
+void LCDWIKI_GUI::Draw_Char(int16_t x, int16_t y, uint8_t c, uint16_t color,uint16_t bg, uint8_t size, bool mode)
 {
 	if((x >= Get_Width()) || (y >= Get_Height()) || ((x + 6 * size - 1) < 0) || ((y + 8 * size - 1) < 0))
 	{
@@ -567,7 +567,7 @@ void LCDWIKI_GUI::Draw_Char(int16_t x, int16_t y, uint8_t c, uint16_t color,uint
     	}
     	else
     	{
-      		line = pgm_read_byte(lcd_font+(c*5)+i);
+      		line = lcd_font[(c*5)+i]; // 直接访问数组（假设字体数据在RAM中）
     	}
     	for (int8_t j = 0; j<8; j++) 
 		{
@@ -654,9 +654,9 @@ void LCDWIKI_GUI::Print_String(uint8_t *st, int16_t x, int16_t y)
 }
 
 //print string
-void LCDWIKI_GUI::Print_String(String st, int16_t x, int16_t y)
+void LCDWIKI_GUI::Print_String(const char* st, int16_t x, int16_t y)
 {
-	Print((uint8_t *)(st.c_str()), x, y);
+	Print((uint8_t *)st, x, y);
 }
 
 //print int number
@@ -664,7 +664,7 @@ void LCDWIKI_GUI::Print_Number_Int(long num, int16_t x, int16_t y, int16_t lengt
 {
 	uint8_t st[27] = {0};
 	uint8_t *p = st+26;
-	boolean flag = false;
+	bool flag = false;
 	int16_t len = 0,nlen = 0,left_len = 0,i = 0;
 	*p = '\0';
 	if(0 == num)
@@ -730,7 +730,7 @@ void LCDWIKI_GUI::Print_Number_Float(double num, uint8_t dec, int16_t x, int16_t
 {
 	uint8_t st[27] = {0};
 	uint8_t * p = st;
-	boolean flag = false;
+	bool flag = false;
 	int16_t i = 0;
 	if(dec<1)
 	{
@@ -744,7 +744,7 @@ void LCDWIKI_GUI::Print_Number_Float(double num, uint8_t dec, int16_t x, int16_t
 	{
 		flag = true;
 	}
-	dtostrf(num, length, dec, (char *)st);
+	snprintf((char *)st, sizeof(st), "%*.*f", length, dec, num); // 格式化浮点数（宽度length，小数位dec）
 	if(divider != '.')
 	{
 		while(i < sizeof(st))

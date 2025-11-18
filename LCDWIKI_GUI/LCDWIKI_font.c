@@ -6,10 +6,11 @@
 #elif defined(ESP8266)
  #include <pgmspace.h>
 #else
-#define PROGMEM
+// #define PROGMEM
+#include "stdint.h"
 #endif
 
-static const unsigned char lcd_font[] PROGMEM = 
+const uint8_t lcd_font[] = 
 {
     0x00, 0x00, 0x00, 0x00, 0x00,   
 	0x3E, 0x5B, 0x4F, 0x5B, 0x3E, 	
