@@ -1,3 +1,8 @@
+# LCDWIKI_GUI
+LCDWIKI's GUI function powered by ESP-IDF.
+
+## 基本信息
+
 This is the core graphics library for all our displays, providing a common set of graphics primitives (points, lines, circles, etc.).  It needs to be paired with a hardware-specific library for each display device we carry (to handle the lower-level functions).
 
 Basic functionally of this library was origianlly based on the demo-code of Adafruit GFX lib and Adafruit TFTLCD lib.  
