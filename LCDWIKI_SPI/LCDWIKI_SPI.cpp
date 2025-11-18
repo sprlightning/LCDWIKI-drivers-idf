@@ -12,16 +12,24 @@
     #define pgm_read_word(addr) (*(const unsigned short *)(addr))
 #endif
 
-#if defined(ARDUINO_ARCH_ESP8266)
+#if defined(ESP32)
 #define USE_HWSPI_ONLY
 #endif
 
-#include <SPI.h>
-#include "pins_arduino.h"
-#include "wiring_private.h"
+// #include <SPI.h>
+// #include "pins_arduino.h"
+// #include "wiring_private.h"
 #include "LCDWIKI_SPI.h"
 #include "lcd_spi_registers.h"
 #include "mcu_spi_magic.h"
+
+// 定义SPI3_HOST（VSPI）
+#ifndef USED_SPI_HOST
+#define USED_SPI_HOST SPI3_HOST
+#endif
+
+// 添加日志标签
+static const char* TAG = "LCDWIKI_SPI";
 
 #define TFTLCD_DELAY16  0xFFFF
 #define TFTLCD_DELAY8   0x7F
@@ -64,6 +72,7 @@ lcd_info current_lcd_info[] =
 							 0x9488,320,480,
 							 0x9488,320,480,
 							 0x9225,176,220,
+							 0x7789,240,320,
 						 };
 
 #if !defined(USE_HWSPI_ONLY)
@@ -80,63 +89,52 @@ LCDWIKI_SPI::LCDWIKI_SPI(uint16_t model,int8_t cs, int8_t cd, int8_t miso, int8_
 	_led = led;
 	hw_spi = false; //software spi
 	MODEL = model;
-	spicsPort = portOutputRegister(digitalPinToPort(_cs));
-	spicsPinSet = digitalPinToBitMask(_cs);
-	spicsPinUnset = ~spicsPinSet;
-		
-	if(cd < 0)
-	{
-		spicdPort = 0;
-		spicdPinSet = 0;
-		spicdPinUnset = 0;
-	}
-	else
-	{
-		spicdPort = portOutputRegister(digitalPinToPort(_cd));
-		spicdPinSet = digitalPinToBitMask(_cd);
-		spicdPinUnset = ~spicdPinSet;	
-	}
-	if(miso < 0)
-	{
-		spimisoPort = 0;
-		spimisoPinSet = 0;
-		spimisoPinUnset = 0;
-	}
-	else
-	{
-		spimisoPort = portOutputRegister(digitalPinToPort(_miso));
-		spimisoPinSet = digitalPinToBitMask(_miso);
-		spimisoPinUnset = ~spimisoPinSet;
-	}
-	spimosiPort = portOutputRegister(digitalPinToPort(_mosi));
-	spimosiPinSet = digitalPinToBitMask(_mosi);
-	spimosiPinUnset = ~spimosiPinSet;
+	
+	// 配置GPIO
+    gpio_config_t io_conf = {};
+    io_conf.mode = GPIO_MODE_OUTPUT;
+    io_conf.pin_bit_mask = (1ULL << _cs) | (1ULL << _cd);
+    if (reset >= 0) io_conf.pin_bit_mask |= (1ULL << _reset);
+    if (led >= 0) io_conf.pin_bit_mask |= (1ULL << _led);
+    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    gpio_config(&io_conf);
 
-	spiclkPort = portOutputRegister(digitalPinToPort(_clk));
-	spiclkPinSet = digitalPinToBitMask(_clk);
-	spiclkPinUnset = ~spiclkPinSet;
+    // 初始化CS/CD为高电平（空闲状态）
+    gpio_set_level((gpio_num_t)_cs, 1);
+    gpio_set_level((gpio_num_t)_cd, 1);
+    if (reset >= 0) gpio_set_level((gpio_num_t)_reset, 1);
+    if (led >= 0) gpio_set_level((gpio_num_t)_led, 0);  // 初始关闭背光
 
-	*spicsPort     |=  spicsPinSet; // Set all control bits to HIGH (idle)
-	*spicdPort     |=  spicdPinSet; // Signals are ACTIVE LOW
-	*spimisoPort   |=  spimisoPinSet;
-	*spimosiPort   |=  spimosiPinSet;
-	*spiclkPort    |=  spiclkPinSet;
+	// 初始化SPI3_HOST
+    spi_bus_config_t buscfg = {};
+    buscfg.miso_io_num = _miso;  // 根据实际硬件配置MISO引脚
+    buscfg.mosi_io_num = _mosi;  // 替换为实际MOSI引脚
+    buscfg.sclk_io_num = _clk;   // 替换为实际SCLK引脚
+    buscfg.quadwp_io_num = -1;
+    buscfg.quadhd_io_num = -1;
+    buscfg.max_transfer_sz = 4096;  // 最大传输大小
 
-	pinMode(cs, OUTPUT);	  // Enable outputs
-	pinMode(cd, OUTPUT);
-	pinMode(miso, INPUT);
-	pinMode(mosi, OUTPUT);
-	pinMode(clk, OUTPUT);
-	if(reset >= 0) 
-	{
-		digitalWrite(reset, HIGH);
-		pinMode(reset, OUTPUT);
-	}
-	if(led >= 0)
-	{
-		//digitalWrite(led, HIGH);
-		pinMode(led, OUTPUT);
-	}
+    // 初始化SPI总线
+    esp_err_t ret = spi_bus_initialize(USED_SPI_HOST, &buscfg, SPI_DMA_CH_AUTO);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "SPI总线初始化失败: %s", esp_err_to_name(ret));
+        return;
+    }
+
+    // 配置SPI设备
+    spi_device_interface_config_t devcfg = {};
+    devcfg.clock_speed_hz = 4000000;  // 4MHz（与原代码SPI_CLOCK_DIV4一致）
+    devcfg.mode = 0;  // SPI_MODE0
+    devcfg.spics_io_num = _cs;  // 使用硬件CS
+    devcfg.queue_size = 7;
+    ret = spi_bus_add_device(USED_SPI_HOST, &devcfg, &spi_dev);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "添加SPI设备失败: %s", esp_err_to_name(ret));
+        return;
+    }
+	
 	xoffset = 0;
 	yoffset = 0;
 	rotation = 0;
@@ -186,64 +184,51 @@ LCDWIKI_SPI::LCDWIKI_SPI(int16_t wid,int16_t heg,int8_t cs, int8_t cd, int8_t mi
 	_led = led;
 	hw_spi = false; //software spi
 
-	spicsPort = portOutputRegister(digitalPinToPort(_cs));
-	spicsPinSet = digitalPinToBitMask(_cs);
-	spicsPinUnset = ~spicsPinSet;
-		
-	if(cd < 0)
-	{
-		spicdPort = 0;
-		spicdPinSet = 0;
-		spicdPinUnset = 0;
-	}
-	else
-	{
-		spicdPort = portOutputRegister(digitalPinToPort(_cd));
-		spicdPinSet = digitalPinToBitMask(_cd);
-		spicdPinUnset = ~spicdPinSet;	
-	}
-	if(miso < 0)
-	{
-		spimisoPort = 0;
-		spimisoPinSet = 0;
-		spimisoPinUnset = 0;
-	}
-	else
-	{
-		spimisoPort = portOutputRegister(digitalPinToPort(_miso));
-		spimisoPinSet = digitalPinToBitMask(_miso);
-		spimisoPinUnset = ~spimisoPinSet;
-	}
+	// 配置GPIO
+    gpio_config_t io_conf = {};
+    io_conf.mode = GPIO_MODE_OUTPUT;
+    io_conf.pin_bit_mask = (1ULL << _cs) | (1ULL << _cd);
+    if (reset >= 0) io_conf.pin_bit_mask |= (1ULL << _reset);
+    if (led >= 0) io_conf.pin_bit_mask |= (1ULL << _led);
+    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    gpio_config(&io_conf);
+
+    // 初始化CS/CD为高电平（空闲状态）
+    gpio_set_level((gpio_num_t)_cs, 1);
+    gpio_set_level((gpio_num_t)_cd, 1);
+    if (reset >= 0) gpio_set_level((gpio_num_t)_reset, 1);
+    if (led >= 0) gpio_set_level((gpio_num_t)_led, 0);  // 初始关闭背光
+
+	// 初始化SPI3_HOST
+    spi_bus_config_t buscfg = {};
+    buscfg.miso_io_num = _miso;  // 根据实际硬件配置MISO引脚
+    buscfg.mosi_io_num = _mosi;  // 替换为实际MOSI引脚
+    buscfg.sclk_io_num = _clk;   // 替换为实际SCLK引脚
+    buscfg.quadwp_io_num = -1;
+    buscfg.quadhd_io_num = -1;
+    buscfg.max_transfer_sz = 4096;  // 最大传输大小
+
+    // 初始化SPI总线
+    esp_err_t ret = spi_bus_initialize(USED_SPI_HOST, &buscfg, SPI_DMA_CH_AUTO);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "SPI总线初始化失败: %s", esp_err_to_name(ret));
+        return;
+    }
+
+    // 配置SPI设备
+    spi_device_interface_config_t devcfg = {};
+    devcfg.clock_speed_hz = 4000000;  // 4MHz（与原代码SPI_CLOCK_DIV4一致）
+    devcfg.mode = 0;  // SPI_MODE0
+    devcfg.spics_io_num = _cs;  // 使用硬件CS
+    devcfg.queue_size = 7;
+    ret = spi_bus_add_device(USED_SPI_HOST, &devcfg, &spi_dev);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "添加SPI设备失败: %s", esp_err_to_name(ret));
+        return;
+    }
 	
-	spimosiPort = portOutputRegister(digitalPinToPort(_mosi));
-	spimosiPinSet = digitalPinToBitMask(_mosi);
-	spimosiPinUnset = ~spimosiPinSet;
-
-	spiclkPort = portOutputRegister(digitalPinToPort(_clk));
-	spiclkPinSet = digitalPinToBitMask(_clk);
-	spiclkPinUnset = ~spiclkPinSet;
-
-	*spicsPort     |=  spicsPinSet; // Set all control bits to HIGH (idle)
-	*spicdPort     |=  spicdPinSet; // Signals are ACTIVE LOW
-	*spimisoPort   |=  spimisoPinSet;
-	*spimosiPort   |=  spimosiPinSet;
-	*spiclkPort    |=  spiclkPinSet;
-
-	pinMode(cs, OUTPUT);	  // Enable outputs
-	pinMode(cd, OUTPUT);
-	pinMode(miso, INPUT);
-	pinMode(mosi, OUTPUT);
-	pinMode(clk, OUTPUT);
-	if(reset >= 0) 
-	{
-		digitalWrite(reset, HIGH);
-		pinMode(reset, OUTPUT);
-	}
-	if(led >= 0)
-	{
-		//digitalWrite(led, HIGH);
-		pinMode(led, OUTPUT);
-	}
 	xoffset = 0;
 	yoffset = 0;
 	rotation = 0;
@@ -263,61 +248,57 @@ LCDWIKI_SPI::LCDWIKI_SPI(uint16_t model,int8_t cs, int8_t cd, int8_t reset, int8
 	_cs = cs;
 	_cd = cd;
 	_miso = -1;
-	_mosi = -1;
-	_clk = -1;
+	_mosi = 23;
+	_clk = 18;
 	_reset = reset;
 	_led = led;
 	hw_spi = true; //hardware spi
 	MODEL = model;
-#if defined(__AVR__)
-	spicsPort = portOutputRegister(digitalPinToPort(_cs));
-	spicsPinSet = digitalPinToBitMask(_cs);
-	spicsPinUnset = ~spicsPinSet;
-	if(cd < 0)
-	{
-		spicdPort = 0;
-		spicdPinSet = 0;
-		spicdPinUnset = 0;
-	}
-	else
-	{
-		spicdPort = portOutputRegister(digitalPinToPort(_cd));
-		spicdPinSet = digitalPinToBitMask(_cd);
-		spicdPinUnset = ~spicdPinSet;	
-	}
-	spimisoPort = 0;
-	spimisoPinSet = 0;
-	spimisoPinUnset = 0;
-	spimosiPort = 0;
-	spimosiPinSet = 0;
-	spimosiPinUnset = 0;
-	spiclkPort = 0;
-	spiclkPinSet = 0;
-	spiclkPinUnset = 0;
-	
-	*spicsPort     |=  spicsPinSet; // Set all control bits to HIGH (idle)
-	*spicdPort     |=  spicdPinSet; // Signals are ACTIVE LOW
-#elif defined(ARDUINO_ARCH_ESP8266)
-	digitalWrite(_cs, HIGH);
-	digitalWrite(_cd, HIGH);
-#endif
-	pinMode(cs, OUTPUT);	  // Enable outputs
-	pinMode(cd, OUTPUT);
 
-	if(reset >= 0) 
-	{
-		digitalWrite(reset, HIGH);
-		pinMode(reset, OUTPUT);
-	}
-	if(led >= 0)
-	{
-		//digitalWrite(led, HIGH);
-		pinMode(led, OUTPUT);
-	}
-	SPI.begin();
-    SPI.setClockDivider(SPI_CLOCK_DIV4); // 4 MHz (half speed)
-    SPI.setBitOrder(MSBFIRST);
-    SPI.setDataMode(SPI_MODE0);
+	// 配置GPIO
+    gpio_config_t io_conf = {};
+    io_conf.mode = GPIO_MODE_OUTPUT;
+    io_conf.pin_bit_mask = (1ULL << _cs) | (1ULL << _cd);
+    if (reset >= 0) io_conf.pin_bit_mask |= (1ULL << _reset);
+    if (led >= 0) io_conf.pin_bit_mask |= (1ULL << _led);
+    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    gpio_config(&io_conf);
+
+    // 初始化CS/CD为高电平（空闲状态）
+    gpio_set_level((gpio_num_t)_cs, 1);
+    gpio_set_level((gpio_num_t)_cd, 1);
+    if (reset >= 0) gpio_set_level((gpio_num_t)_reset, 1);
+    if (led >= 0) gpio_set_level((gpio_num_t)_led, 0);  // 初始关闭背光
+
+	// 初始化SPI3_HOST
+    spi_bus_config_t buscfg = {};
+    buscfg.miso_io_num = _miso;  // 根据实际硬件配置MISO引脚
+    buscfg.mosi_io_num = _mosi;  // 替换为实际MOSI引脚
+    buscfg.sclk_io_num = _clk;   // 替换为实际SCLK引脚
+    buscfg.quadwp_io_num = -1;
+    buscfg.quadhd_io_num = -1;
+    buscfg.max_transfer_sz = 4096;  // 最大传输大小
+
+    // 初始化SPI总线
+    esp_err_t ret = spi_bus_initialize(USED_SPI_HOST, &buscfg, SPI_DMA_CH_AUTO);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "SPI总线初始化失败: %s", esp_err_to_name(ret));
+        return;
+    }
+
+    // 配置SPI设备
+    spi_device_interface_config_t devcfg = {};
+    devcfg.clock_speed_hz = 4000000;  // 4MHz（与原代码SPI_CLOCK_DIV4一致）
+    devcfg.mode = 0;  // SPI_MODE0
+    devcfg.spics_io_num = _cs;  // 使用硬件CS
+    devcfg.queue_size = 7;
+    ret = spi_bus_add_device(USED_SPI_HOST, &devcfg, &spi_dev);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "添加SPI设备失败: %s", esp_err_to_name(ret));
+        return;
+    }
 
 	xoffset = 0;
 	yoffset = 0;
@@ -362,61 +343,56 @@ LCDWIKI_SPI::LCDWIKI_SPI(int16_t wid,int16_t heg,int8_t cs, int8_t cd, int8_t re
 	_cs = cs;
 	_cd = cd;
 	_miso = -1;
-	_mosi = -1;
-	_clk = -1;
+	_mosi = 23;
+	_clk = 18;
 	_reset = reset;
 	_led = led;
 	hw_spi = true; //hardware spi
-#if defined(__AVR__)
-	spicsPort = portOutputRegister(digitalPinToPort(_cs));
-	spicsPinSet = digitalPinToBitMask(_cs);
-	spicsPinUnset = ~spicsPinSet;
-	if(cd < 0)
-	{
-		spicdPort = 0;
-		spicdPinSet = 0;
-		spicdPinUnset = 0;
-	}
-	else
-	{
-		spicdPort = portOutputRegister(digitalPinToPort(_cd));
-		spicdPinSet = digitalPinToBitMask(_cd);
-		spicdPinUnset = ~spicdPinSet;	
-	}
-	spimisoPort = 0;
-	spimisoPinSet = 0;
-	spimisoPinUnset = 0;
-	spimosiPort = 0;
-	spimosiPinSet = 0;
-	spimosiPinUnset = 0;
-	spiclkPort = 0;
-	spiclkPinSet = 0;
-	spiclkPinUnset = 0;
 
-	*spicsPort     |=  spicsPinSet; // Set all control bits to HIGH (idle)
-	*spicdPort     |=  spicdPinSet; // Signals are ACTIVE LOW
-#elif defined(ARDUINO_ARCH_ESP8266)
-		digitalWrite(_cs, HIGH);
-		digitalWrite(_cd, HIGH);
-#endif
+	// 配置GPIO
+    gpio_config_t io_conf = {};
+    io_conf.mode = GPIO_MODE_OUTPUT;
+    io_conf.pin_bit_mask = (1ULL << _cs) | (1ULL << _cd);
+    if (reset >= 0) io_conf.pin_bit_mask |= (1ULL << _reset);
+    if (led >= 0) io_conf.pin_bit_mask |= (1ULL << _led);
+    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    gpio_config(&io_conf);
 
-	pinMode(cs, OUTPUT);	  // Enable outputs
-	pinMode(cd, OUTPUT);	
+    // 初始化CS/CD为高电平（空闲状态）
+    gpio_set_level((gpio_num_t)_cs, 1);
+    gpio_set_level((gpio_num_t)_cd, 1);
+    if (reset >= 0) gpio_set_level((gpio_num_t)_reset, 1);
+    if (led >= 0) gpio_set_level((gpio_num_t)_led, 0);  // 初始关闭背光
 
-	if(reset >= 0) 
-	{
-		digitalWrite(reset, HIGH);
-		pinMode(reset, OUTPUT);
-	}
-	if(led >= 0)
-	{
-		//digitalWrite(led, HIGH);
-		pinMode(led, OUTPUT);
-	}
-	SPI.begin();
-    SPI.setClockDivider(SPI_CLOCK_DIV4); // 4 MHz (half speed)
-    SPI.setBitOrder(MSBFIRST);
-    SPI.setDataMode(SPI_MODE0);
+	// 初始化SPI3_HOST
+    spi_bus_config_t buscfg = {};
+    buscfg.miso_io_num = _miso;  // 根据实际硬件配置MISO引脚
+    buscfg.mosi_io_num = _mosi;  // 替换为实际MOSI引脚
+    buscfg.sclk_io_num = _clk;   // 替换为实际SCLK引脚
+    buscfg.quadwp_io_num = -1;
+    buscfg.quadhd_io_num = -1;
+    buscfg.max_transfer_sz = 4096;  // 最大传输大小
+
+    // 初始化SPI总线
+    esp_err_t ret = spi_bus_initialize(USED_SPI_HOST, &buscfg, SPI_DMA_CH_AUTO);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "SPI总线初始化失败: %s", esp_err_to_name(ret));
+        return;
+    }
+
+    // 配置SPI设备
+    spi_device_interface_config_t devcfg = {};
+    devcfg.clock_speed_hz = 4000000;  // 4MHz（与原代码SPI_CLOCK_DIV4一致）
+    devcfg.mode = 0;  // SPI_MODE0
+    devcfg.spics_io_num = _cs;  // 使用硬件CS
+    devcfg.queue_size = 7;
+    ret = spi_bus_add_device(USED_SPI_HOST, &devcfg, &spi_dev);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "添加SPI设备失败: %s", esp_err_to_name(ret));
+        return;
+    }
 
 	xoffset = 0;
 	yoffset = 0;
@@ -449,8 +425,8 @@ void LCDWIKI_SPI::reset(void)
 //	have_reset = 1;
 //    setWriteDir();
     CS_IDLE;
-    RD_IDLE;
-    WR_IDLE;
+    // RD_IDLE;
+    // WR_IDLE;
   if(_reset >=0) 
   {
     digitalWrite(_reset, LOW);
@@ -467,7 +443,7 @@ void LCDWIKI_SPI::reset(void)
   CS_IDLE;
 }
 
-void LCDWIKI_SPI::Led_control(boolean i)
+void LCDWIKI_SPI::Led_control(bool i)
 {
 	if(_led >= 0)
 	{
@@ -487,7 +463,14 @@ void LCDWIKI_SPI::Spi_Write(uint8_t data)
 {
 	if(hw_spi)
 	{
-		SPI.transfer(data);
+		// SPI.transfer(data);
+		spi_transaction_t t = {};
+        t.length = 8;  // 8位数据
+        t.tx_buffer = &data;
+        esp_err_t ret = spi_device_transmit(spi_dev, &t);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "SPI写入失败: %s", esp_err_to_name(ret));
+        }
 	}
 	else
 	{
@@ -514,11 +497,22 @@ uint8_t LCDWIKI_SPI::Spi_Read(void)
 {
 	if(hw_spi)
 	{
-		return SPI.transfer(0xFF);
+		// return SPI.transfer(0xFF);
+		uint8_t data, dummy = 0xFF;
+		spi_transaction_t t = {};
+        t.length = 8;
+        t.rx_buffer = &data;
+        t.tx_buffer = &dummy;  // 发送 dummy 数据
+        esp_err_t ret = spi_device_transmit(spi_dev, &t);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "SPI读取失败: %s", esp_err_to_name(ret));
+            return 0;
+        }
+        return data;
 	}
 	else
 	{
-		uint8_t val,i,d;
+		uint8_t val = 0,i,d;
 		for(i = 0;i<8; i++)
 		{
 			CLK_LOW; 
@@ -697,17 +691,37 @@ void LCDWIKI_SPI::Set_Addr_Window(int16_t x1, int16_t y1, int16_t x2, int16_t y2
 	{
 		return;
 	}
-	else if(lcd_driver == ID_7735_128)
+	else if((lcd_driver == ID_7735_128))
 	{
-		uint8_t x_buf[] = {(x1+xoffset)>>8,(x1+xoffset)&0xFF,(x2+xoffset)>>8,(x2+xoffset)&0xFF};
-		uint8_t y_buf[] = {(y1+yoffset)>>8,(y1+yoffset)&0xFF,(y2+yoffset)>>8,(y2+yoffset)&0xFF};
+		uint8_t x_buf[] = {
+			(uint8_t)((x1+xoffset)>>8),
+			(uint8_t)((x1+xoffset)&0xFF),
+			(uint8_t)((x2+xoffset)>>8),
+			(uint8_t)((x2+xoffset)&0xFF)
+		};
+		uint8_t y_buf[] = {
+			(uint8_t)((y1+yoffset)>>8),
+			(uint8_t)((y1+yoffset)&0xFF),
+			(uint8_t)((y2+yoffset)>>8),
+			(uint8_t)((y2+yoffset)&0xFF)
+		};
 		Push_Command(XC, x_buf, 4);
 		Push_Command(YC, y_buf, 4);
 	}
 	else
 	{
-		uint8_t x_buf[] = {x1>>8,x1&0xFF,x2>>8,x2&0xFF};
-		uint8_t y_buf[] = {y1>>8,y1&0xFF,y2>>8,y2&0xFF};
+		uint8_t x_buf[] = {
+			(uint8_t)(x1>>8),
+			(uint8_t)(x1&0xFF),
+			(uint8_t)(x2>>8),
+			(uint8_t)(x2&0xFF)
+		};
+		uint8_t y_buf[] = {
+			(uint8_t)(y1>>8),
+			(uint8_t)(y1&0xFF),
+			(uint8_t)(y2>>8),
+			(uint8_t)(y2&0xFF)
+		};
 	
 		Push_Command(XC, x_buf, 4);
 		Push_Command(YC, y_buf, 4);
@@ -848,7 +862,7 @@ uint16_t LCDWIKI_SPI::Read_Reg(uint16_t reg, int8_t index)
 //read graph RAM data
 int16_t LCDWIKI_SPI::Read_GRAM(int16_t x, int16_t y, uint16_t *block, int16_t w, int16_t h)
 {
-	uint16_t ret, dummy;
+	uint16_t ret = 0, dummy; // ret需要初始化
     int16_t n = w * h;
     uint8_t r, g, b, tmp;
     Set_Addr_Window(x, y, x + w - 1, y + h - 1);
@@ -903,7 +917,7 @@ int16_t LCDWIKI_SPI::Read_GRAM(int16_t x, int16_t y, uint16_t *block, int16_t w,
 //read LCD controller chip ID
 uint16_t LCDWIKI_SPI::Read_ID(void)
 {
-	uint16_t ret;
+	uint32_t ret; // ret需要uint32_t
 	if ((Read_Reg(0x04,0) == 0x00)&&(Read_Reg(0x04,1) == 0x8000))
 	{
 		uint8_t buf[] = {0xFF, 0x83, 0x57};
@@ -1147,7 +1161,7 @@ void LCDWIKI_SPI::Set_Rotation(uint8_t r)
 	CS_ACTIVE;
 	if((lcd_driver == ID_932X)||(lcd_driver == ID_9225))
 	{
-		uint16_t val;
+		uint16_t val = 0; // 必须要初始化，其他的也一样
 		switch(rotation) 
 		{
 			case 0: 
@@ -1167,7 +1181,7 @@ void LCDWIKI_SPI::Set_Rotation(uint8_t r)
 	}
 	else if(lcd_driver == ID_7735)
 	{
-		uint8_t val;
+		uint8_t val = 0;
 		switch(rotation)
 		{
 			case 0: 
@@ -1187,7 +1201,7 @@ void LCDWIKI_SPI::Set_Rotation(uint8_t r)
 	}
 	else if(lcd_driver == ID_7735_128)
 	{
-		uint8_t val;
+		uint8_t val = 0;
 		switch(rotation)
 		{
 			case 0: 
@@ -1235,7 +1249,7 @@ void LCDWIKI_SPI::Set_Rotation(uint8_t r)
 	}
 	else if(lcd_driver == ID_9486)
 	{
-		uint8_t val;
+		uint8_t val = 0;
 		switch (rotation) 
 		{
 		   	case 0:
@@ -1255,7 +1269,7 @@ void LCDWIKI_SPI::Set_Rotation(uint8_t r)
 	}
 	else if(lcd_driver == ID_9488)
 	{
-		uint8_t val;
+		uint8_t val = 0;
 		switch (rotation) 
 		{			
 			case 0:
@@ -1273,9 +1287,29 @@ void LCDWIKI_SPI::Set_Rotation(uint8_t r)
 		 }
 		 writeCmdData8(MD, val); 
 	}
+	else if(lcd_driver == ID_7789)
+	{
+		uint8_t val = 0;
+		switch(rotation)
+		{
+			case 0: 
+				val = 0x00; //0 degree
+				break;
+		 	case 1: 
+				val = 0x60; //90 degree 
+				break;
+		 	case 2: 
+				val = 0xC0; //180 degree 
+				break;
+		 	case 3: 
+				val = 0xA0; //270 degree 
+				break;			
+		}
+		writeCmdData8(MD, val);
+	}
 	else
 	{
-		uint8_t val;
+		uint8_t val = 0;
 		switch (rotation) 
 		{
 		   	case 0:
@@ -1309,7 +1343,7 @@ uint8_t LCDWIKI_SPI::Get_Rotation(void) const
 }
 
 //Anti color display 
-void LCDWIKI_SPI::Invert_Display(boolean i)
+void LCDWIKI_SPI::Invert_Display(bool i)
 {
 	CS_ACTIVE;
 	uint8_t val = VL^i;
@@ -1323,7 +1357,7 @@ void LCDWIKI_SPI::Invert_Display(boolean i)
 	}
 	else if(lcd_driver == ID_1283A)
 	{
-		uint16_t reg;
+		uint16_t reg = 0x0183; // 必须要初始化
 		if((rotation == 0)||(rotation == 2))
 		{
 			if(val)
@@ -1397,7 +1431,7 @@ void LCDWIKI_SPI::SH1106_Draw_Bitmap(uint8_t x,uint8_t y,uint8_t width, uint8_t 
 
 void LCDWIKI_SPI::SH1106_Display(void)
 {
-	u8 i,n;	
+	uint8_t i,n;	
 	CS_ACTIVE;
 	for(i=0;i<8;i++)  
 	{  
@@ -1468,7 +1502,7 @@ void LCDWIKI_SPI::start(uint16_t ID)
 			//WIDTH = 240,HEIGHT = 320;
 			//width = WIDTH, height = HEIGHT;
 			XC=0,YC=0,CC=ILI932X_RW_GRAM,RC=ILI932X_RW_GRAM,SC1=ILI932X_GATE_SCAN_CTRL2,SC2=ILI932X_GATE_SCAN_CTRL3,MD=0x0003,VL=1,R24BIT=0;
-			static const uint16_t ILI932x_regValues[] PROGMEM = 
+			static const uint16_t ILI932x_regValues[]  = 
 			{			
 		  		ILI932X_START_OSC 	   , 0x0001, // Start oscillator
 		  		TFTLCD_DELAY16			   , 50,	 // 50 millisecond delay
@@ -1529,7 +1563,7 @@ void LCDWIKI_SPI::start(uint16_t ID)
 			//WIDTH = 240,HEIGHT = 320;
 			//width = WIDTH, height = HEIGHT;
 			XC=ILI9341_COLADDRSET,YC=ILI9341_PAGEADDRSET,CC=ILI9341_MEMORYWRITE,RC=HX8357_RAMRD,SC1=0x33,SC2=0x37,MD=ILI9341_MADCTL,VL=0,R24BIT=1;
-			static const uint8_t ILI9341_regValues[] PROGMEM = 
+			static const uint8_t ILI9341_regValues[]  = 
 			{        // BOE 2.4"
 				ILI9341_SOFTRESET,0,                 //Soft Reset
 				TFTLCD_DELAY8, 50, 
@@ -1570,7 +1604,7 @@ void LCDWIKI_SPI::start(uint16_t ID)
 			//WIDTH = 320,HEIGHT = 480;
 			//width = WIDTH, height = HEIGHT;
 			XC=ILI9341_COLADDRSET,YC=ILI9341_PAGEADDRSET,CC=HX8357_RAMWR,RC=HX8357_RAMRD,SC1=0x33,SC2=0x37,MD=HX8357_MADCTL,VL=1,R24BIT=1;
-			static const uint8_t HX8357D_regValues[] PROGMEM = 
+			static const uint8_t HX8357D_regValues[] = 
 			{
   				HX8357_SWRESET, 0,
   				HX8357D_SETC, 3, 0xFF, 0x83, 0x57,
@@ -1600,7 +1634,7 @@ void LCDWIKI_SPI::start(uint16_t ID)
 			//WIDTH = 240,HEIGHT = 320;
 			//width = WIDTH, height = HEIGHT;
 			XC=0,YC=0,CC=0x22,RC=ILI932X_RW_GRAM,SC1=0x0E,SC2=0x14,MD=HX8347G_MEMACCESS,VL=1,R24BIT=1;
-			static const uint8_t HX8347G_regValues[] PROGMEM = 
+			static const uint8_t HX8347G_regValues[] = 
 			{
 				//  0xEA, 2, 0x00, 0x20,        //PTBA[15:0]
                //   0xEC, 2, 0x0C, 0xC4,   //
@@ -1663,7 +1697,7 @@ void LCDWIKI_SPI::start(uint16_t ID)
 			//WIDTH = 320,HEIGHT = 480;
 			//width = WIDTH, height = HEIGHT;
 			XC=ILI9341_COLADDRSET,YC=ILI9341_PAGEADDRSET,CC=ILI9341_MEMORYWRITE,RC=HX8357_RAMRD,SC1=0x33,SC2=0x37,MD=ILI9341_MADCTL,VL=0,R24BIT=0;
-			static const uint8_t ILI9486_regValues[] PROGMEM = 
+			static const uint8_t ILI9486_regValues[]  = 
 			{
 			    0xF1, 6, 0x36, 0x04, 0x00, 0x3C, 0x0F, 0x8F,
 				0xF2, 9, 0x18, 0xA3, 0x12, 0x02, 0xB2, 0x12, 0xFF, 0x10, 0x00, 
@@ -1705,18 +1739,18 @@ void LCDWIKI_SPI::start(uint16_t ID)
 			lcd_driver = ID_9488;			
 			if(MODEL == ILI9488_18)
 			{
-				static const uint8_t ILI9488_IPF[] PROGMEM ={0x3A,1,0x66};
+				static const uint8_t ILI9488_IPF[]  ={0x3A,1,0x66};
 				init_table8(ILI9488_IPF, sizeof(ILI9488_IPF));
 			}
 			else
 			{
-				static const uint8_t ILI9488_IPF[] PROGMEM ={0x3A,1,0x55};
+				static const uint8_t ILI9488_IPF[]  ={0x3A,1,0x55};
 				init_table8(ILI9488_IPF, sizeof(ILI9488_IPF));
 			}
 			//WIDTH = 320,HEIGHT = 480;
 			//width = WIDTH, height = HEIGHT;
-			XC=ILI9341_COLADDRSET,YC=ILI9341_PAGEADDRSET,CC=ILI9341_MEMORYWRITE,RC=HX8357_RAMRD,SC1=0x33,SC2=0x37,MD=ILI9341_MADCTL,VL=0,R24BIT=1;
-			static const uint8_t ILI9488_regValues[] PROGMEM = 
+			XC=ILI9341_COLADDRSET,YC=ILI9341_PAGEADDRSET,CC=ILI9341_MEMORYWRITE,RC=HX8357_RAMRD,SC1=0x33,SC2=0x37,MD=ILI9341_MADCTL,VL=0,R24BIT=0;
+			static const uint8_t ILI9488_regValues[]  = 
 			{
 				0xF7, 4, 0xA9, 0x51, 0x2C, 0x82,
 				0xC0, 2, 0x11, 0x09,
@@ -1742,7 +1776,7 @@ void LCDWIKI_SPI::start(uint16_t ID)
 			//WIDTH = 176,HEIGHT = 220;
 			//width = WIDTH, height = HEIGHT;
 			XC=0x20,YC=0x21,CC=0x22,RC=0x22,SC1=0x31,SC2=0x33,MD=0x03,VL=1,R24BIT=0;
-			static const uint16_t ILI9225_regValues[] PROGMEM = 
+			static const uint16_t ILI9225_regValues[]  = 
 			{
 				0x01, 0x011C,
 				0x02, 0x0100,	
@@ -1802,7 +1836,7 @@ void LCDWIKI_SPI::start(uint16_t ID)
 			//WIDTH = 128,HEIGHT = 160;
 			//width = WIDTH, height = HEIGHT;
 			XC=ILI9341_COLADDRSET,YC=ILI9341_PAGEADDRSET,CC=ILI9341_MEMORYWRITE,RC=HX8357_RAMRD,SC1=0x33,SC2=0x37,MD=ILI9341_MADCTL,VL=0,R24BIT=0;
-			static const uint8_t ST7735S_regValues[] PROGMEM = 
+			static const uint8_t ST7735S_regValues[]  = 
 			{
 				0x11, 0,            
             	TFTLCD_DELAY8, 120,  
@@ -1830,7 +1864,7 @@ void LCDWIKI_SPI::start(uint16_t ID)
 		 case 0x1283:
 		 	lcd_driver = ID_1283A;
 			XC=0x45,YC=0x44,CC=0x22,RC=HX8357_RAMRD,SC1=0x41,SC2=0x42,MD=0x03,VL=1,R24BIT=0;
-		 	static const uint16_t SSD1283A_regValues[] PROGMEM = 
+		 	static const uint16_t SSD1283A_regValues[]  = 
 			{
 				0x10, 0x2F8E,            
             	0x11, 0x000C,  
@@ -1862,7 +1896,7 @@ void LCDWIKI_SPI::start(uint16_t ID)
 		case 0x1106:
 		 	lcd_driver = ID_1106;
 			XC=0x10,YC=0xB0,CC=0,RC=0,SC1=0,SC2=0,MD=0,VL=1,R24BIT=0;
-			static const uint8_t SH1106_regValues[] PROGMEM = 
+			static const uint8_t SH1106_regValues[]  = 
 			{
 				0x8D, 0,            
             	0x10, 0,  
@@ -1897,10 +1931,34 @@ void LCDWIKI_SPI::start(uint16_t ID)
 			};
 			init_table8(SH1106_regValues, sizeof(SH1106_regValues));
 			break;
+		case 0x7789:
+			lcd_driver = ID_7789;
+			XC=ILI9341_COLADDRSET,YC=ILI9341_PAGEADDRSET,CC=ILI9341_MEMORYWRITE,RC=HX8357_RAMRD,SC1=0x33,SC2=0x37,MD=ILI9341_MADCTL,VL=0,R24BIT=1;
+			static const uint8_t ST7789_regValues[] = 
+			{
+				0x36, 1, 0x00,                        	  
+            	0x3A, 1, 0x05,          
+            	0xB2, 5, 0x0C, 0x0C, 0x00, 0x33, 0x33,      
+            	0xB7, 1, 0x35,      
+            	0xBB, 1, 0x19,        
+            	0xC0, 1, 0x2C,     
+            	0xC2, 1, 0x01,     
+            	0xC3, 1, 0x12,   
+            	0xC4, 1, 0x20,  
+            	0xC6, 1, 0x0F,
+            	0xD0, 2, 0xA4, 0xA1,
+            	0xE0, 14,0xD0, 0x04, 0x0D, 0x11, 0x13, 0x2B, 0x3F, 0x54, 0x4C, 0x18, 0x0D, 0x0B, 0x1F, 0x23,
+            	0xE1, 14,0xD0, 0x04, 0x0C, 0x11, 0x13, 0x2C, 0x3F, 0x44, 0x51, 0x2F, 0x1F, 0x1F, 0x20, 0x23,         
+            	0x21, 0, 
+            	0x11, 0,
+            	0x29, 0,
+			};
+			init_table8(ST7789_regValues, sizeof(ST7789_regValues));
+			break;
 		default:
 			lcd_driver = ID_UNKNOWN;
 			break;		
 	}
 	Set_Rotation(rotation); 
-	Invert_Display(false);
+//	Invert_Display(true);
 }

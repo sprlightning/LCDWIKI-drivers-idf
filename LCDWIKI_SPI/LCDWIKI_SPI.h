@@ -7,7 +7,8 @@
 #if ARDUINO >= 100
 #include "Arduino.h"
 #else
-#include "WProgram.h"
+// #include "WProgram.h"
+#include "NeverUseArduino.h"
 #endif
 
 #ifdef __AVR__
@@ -33,6 +34,7 @@
 #define ID_7735_128 9
 #define ID_9488   10
 #define ID_9225   11
+#define ID_7789   12
 #define ID_UNKNOWN 0xFF
 
 //LCD controller chip mode identifiers
@@ -50,6 +52,7 @@
 #define ILI9488 11
 #define ILI9488_18 12
 #define ILI9225 13
+#define ST7789 14
 
 
 typedef struct _lcd_info
@@ -83,7 +86,7 @@ class LCDWIKI_SPI:public LCDWIKI_GUI
 	void Fill_Rect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
 	void Set_Rotation(uint8_t r); 
 	uint8_t Get_Rotation(void) const;
-	void Invert_Display(boolean i);
+	void Invert_Display(bool i);
 	void SH1106_Display(void);
 	void SH1106_Draw_Bitmap(uint8_t x,uint8_t y,uint8_t width, uint8_t height, uint8_t *BMP, uint8_t mode);
 	uint16_t Read_Reg(uint16_t reg, int8_t index);
@@ -95,18 +98,19 @@ class LCDWIKI_SPI:public LCDWIKI_GUI
 	int16_t Get_Height(void) const;
   	int16_t Get_Width(void) const;
 	void Set_LR(void);
-	void Led_control(boolean i);
+	void Led_control(bool i);
 
 	protected:
 	uint8_t xoffset,yoffset;
     uint16_t WIDTH,HEIGHT,width, height, rotation,lcd_driver,lcd_model;
-	boolean hw_spi;
+	bool hw_spi;
 	private:
+	spi_device_handle_t spi_dev;  // SPI设备句柄
 	uint16_t XC,YC,CC,RC,SC1,SC2,MD,VL,R24BIT,MODEL;
  
-		 volatile uint8_t *spicsPort, *spicdPort, *spimisoPort , *spimosiPort, *spiclkPort;
-			      uint8_t  spicsPinSet, spicdPinSet  ,spimisoPinSet , spimosiPinSet , spiclkPinSet,
-						   spicsPinUnset, spicdPinUnset, spimisoPinUnset,  spimosiPinUnset,spiclkPinUnset;
-				  int8_t   _cs,_cd,_miso,_mosi,_clk,_reset,_led;
+	volatile uint8_t *spicsPort, *spicdPort, *spimisoPort , *spimosiPort, *spiclkPort;
+			uint8_t  spicsPinSet, spicdPinSet  ,spimisoPinSet , spimosiPinSet , spiclkPinSet,
+					spicsPinUnset, spicdPinUnset, spimisoPinUnset,  spimosiPinUnset,spiclkPinUnset;
+			int8_t   _cs,_cd,_miso,_mosi,_clk,_reset,_led;
 };
 #endif

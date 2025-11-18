@@ -7,10 +7,10 @@
 #define setWriteDir() 
 #define setReadDir()  
 
-#define RD_ACTIVE   0
-#define RD_IDLE     0
-#define WR_ACTIVE   0
-#define WR_IDLE     0
+// #define RD_ACTIVE   0
+// #define RD_IDLE     0
+// #define WR_ACTIVE   0
+// #define WR_IDLE     0
 #if defined(__AVR__)
 #define CD_COMMAND  *spicdPort &= spicdPinUnset     
 #define CD_DATA     *spicdPort |= spicdPinSet
@@ -22,7 +22,7 @@
 #define CLK_LOW  *spiclkPort &= spiclkPinUnset
 #define CLK_HIGH    *spiclkPort |= spiclkPinSet
 
-#elif defined(ARDUINO_ARCH_ESP8266)
+#elif defined(ESP32)
 #define CD_COMMAND  (digitalWrite(_cd,LOW))    
 #define CD_DATA     (digitalWrite(_cd,HIGH)) 
 #define CS_ACTIVE   (digitalWrite(_cs,LOW)) 
@@ -52,12 +52,13 @@
 #define writeData16(x)  CD_DATA; write16(x)
 #define writeData18(x)  CD_DATA; write8((x>>8)&0xF8);write8((x>>3)&0xFC);write8(x<<3)
 
-
-//#define writeCmdData8(a, d) { CD_COMMAND; write8(a); CD_DATA; write8(d); }
-//#define writeCmdData16(a, d) { \
-  //uint8_t hi, lo; \
- // hi = (a) >> 8; lo = (a); CD_COMMAND; write8(hi); write8(lo); \
- // hi = (d) >> 8; lo = (d); CD_DATA   ; write8(hi); write8(lo); }
+/*
+#define writeCmdData8(a, d) { CD_COMMAND; write8(a); CD_DATA; write8(d); }
+#define writeCmdData16(a, d) { \
+  uint8_t hi, lo; \
+ hi = (a) >> 8; lo = (a); CD_COMMAND; write8(hi); write8(lo); \
+ hi = (d) >> 8; lo = (d); CD_DATA   ; write8(hi); write8(lo); }
+*/
 
 #define writeCmdData8(a, d) CD_COMMAND; write8(a); CD_DATA; write8(d)
 #define writeCmdData16(a, d)  CD_COMMAND; write8(a>>8); write8(a); CD_DATA; write8(d>>8); write8(d)
