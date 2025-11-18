@@ -1,14 +1,20 @@
+# LCDWIKI-drivers-idf
+Use LCDWIKI's TFT drivers on ESP-IDF.
+
+## 基本信息
+
 This is a library for the SPI lcd display.
+
 This library support these lcd controller:
-ILI9325 
-ILI9328 
-ILI9341 
-HX8357D 
-HX8347G 
-HX8347I 
-ILI9486 
-ST7735S 
-SSD1283A
+- ILI9325 
+- ILI9328 
+- ILI9341 
+- HX8357D 
+- HX8347G 
+- HX8347I 
+- ILI9486 
+- ST7735S 
+- SSD1283A
 
 Check out the file of LCDWIKI SPI lib Requirements for our tutorials and wiring diagrams.
 
