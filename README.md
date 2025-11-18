@@ -3,7 +3,7 @@ Use LCDWIKI's TFT drivers on ESP-IDF.
 
 ## 基本信息
 
-This is a library for the SPI lcd display.
+This is a library for the SPI lcd display. Include LCDWIKI_SPI & LCDWIKI_GUI.
 
 This library support these lcd controller:
 - ILI9325 
