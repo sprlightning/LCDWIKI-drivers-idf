@@ -1152,7 +1152,15 @@ int16_t LCDWIKI_SPI::Get_Height(void) const
 	return height;
 }
 
-//set clockwise rotation
+/******************************************************************************
+function:	Set Clockwise Rotation
+parameter:
+    r    :  Rotation angle, 0~3
+note     :  0，竖屏（排线朝下）
+			1，横屏（排线朝右）
+			2，竖屏（排线朝上）
+			3，横屏（排线朝左）
+******************************************************************************/
 void LCDWIKI_SPI::Set_Rotation(uint8_t r)
 {
     rotation = r & 3;           // just perform the operation ourselves on the protected variables
