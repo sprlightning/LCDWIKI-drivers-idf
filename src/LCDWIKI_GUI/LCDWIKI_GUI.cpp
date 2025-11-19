@@ -540,7 +540,14 @@ uint8_t LCDWIKI_GUI::Get_Text_Size(void) const
 	return text_size;
 }
 
-//set text mode
+/******************************************************************************
+function:	Set Text Mode
+parameter:
+    mode           ：Text Mode
+note     : if set, text_bgcolor is invalid
+         : 0，字符背景色有效
+         : 1，字符背景色无效
+******************************************************************************/
 void LCDWIKI_GUI::Set_Text_Mode(bool mode)
 {
 	text_mode = mode;

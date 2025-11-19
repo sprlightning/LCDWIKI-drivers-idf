@@ -162,7 +162,11 @@ extern "C" void app_main(void)
 
 开关**USE_GxEPD**控制**是否使用GoodDisplay的ESP32-L开发板**，其默认置1是启用GoodDisplay ESP32-L，如使用其它开发板如微雪的[电子墨水屏无线网络驱动板](https://www.waveshare.net/shop/e-Paper-ESP32-Driver-Board.htm)，需要将开关**USE_GxEPD**置0，否则会影响SPI和墨水屏控制IO的定义。同样的，如果你没有使用上述开发板，使用的是自定义板子，那请修改为实际IO值；
 
-LCDWIKI_SPI定义了多组函数，分软件SPI（8个参数）和硬件SPI（5个参数），通过不同的参数数量进行区分，不过我设置了ESP32默认仅使用硬件SPI（SPI3_HOST，ESP32对应VSPI），此时只需要为LCDWIKI_SPI传入“MODEL, CS, CD, RST, LED”这5个参数，其余的MOSI和SCLK已在LCDWIKI_SPI.cpp预定义，假如强行传入大于5个参数，将会触发函数未定义的错误；假如你不喜欢这样，你希望同时传入所有参数来启用软件SPI（即使你用的是硬件SPI引脚），那你只需要禁用USE_HWSPI_ONLY宏定义即可，这将会开放软件SPI条件编译，你可以通过传入“MODEL,CS,CD,-1,SDA,RST,SCK,LED”这8个参数来启用软件SPI函数，这将开放SPI引脚的选择；软件SPI与硬件SPI本质只是有没有预定义MOSI和SCLK，性能取决于你实际接的引脚；
+在**LCDWIKI_SPI.cpp**有4个与类名**LCDWIKI_SPI**一致的spi初始化构造函数，分两个软件spi（传入spi pin）和2个硬件spi（不传入spi pin），通过不同的参数数量进行区分；同时软件/硬件spi函数又通过是否传入model/尺寸区分tft型号/尺寸；4个构造函数都能处理硬件spi，而软件spi的本质是在检测到接入非硬件spi引脚时进行限频；硬件spi最高支持80MHz（超过60MHz可能会不稳定），软件spi最高支持27MHz；
+
+硬件SPI默认使用ESP32的VSPI（SPI3_HOST），此时只需要为LCDWIKI_SPI传入“MODEL, CS, CD, RST, LED, FREQ”这6个参数，其余的MOSI和SCLK已在LCDWIKI_SPI硬件spi构造函数中预定义；假如传入9个参数，如“MODEL, CS, CD, -1, SDA, RST, SCK, LED, FREQ”，将会自动判断使用软件/硬件spi；
+
+关于spi_device_handle句柄，默认为spi_dev，属于public成员，这是因为默认是在LCDWIKI_SPI.cpp中执行spi初始化；假如你希望在main.cpp中执行spi初始化，那就将spi初始化函数放到main.cpp中，并在main.cpp执行此句柄的初始化，LCDWIKI_SPI.h会自动extern此句柄。
 
 
 ## 字体

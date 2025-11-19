@@ -13,7 +13,7 @@
 #endif
 
 #if defined(ESP32)
-#define USE_HWSPI_ONLY
+#define USE_HWSPI_ONLY 0
 #endif
 
 // #include <SPI.h>
@@ -75,10 +75,70 @@ lcd_info current_lcd_info[] =
 							 0x7789,240,320,
 						 };
 
-#if !defined(USE_HWSPI_ONLY)
-// Constructor for software spi.
-// if modules is unreadable or you don't know the width and height of modules,you can use this constructor.
-LCDWIKI_SPI::LCDWIKI_SPI(uint16_t model,int8_t cs, int8_t cd, int8_t miso, int8_t mosi, int8_t reset, int8_t clk, int8_t led)
+/******************************************************************************
+function:	Check Spi Mode(2 pins)
+parameter:
+    pin1    : spi pin, mosi / clk
+	pin2    : spi pin, mosi / clk
+return   : true for hardware spi, false for software spi.
+note     : ESP32 hardware spi pins: 
+	SPI: GPIO6 ~ GPIO11
+	HSPI:  GPIO2，GPIO4，GPIO12 ~ GPIO15
+	VSPI:  GPIO5，GPIO18 ~ GPIO19，GPIO21 ~ GPIO23
+******************************************************************************/
+bool LCDWIKI_SPI::is_hw_spi(int8_t pin1, int8_t pin2) {
+	// 检查是否为硬件SPI引脚（要求pin1和pin2必须是同一组硬件spi引脚）
+	if ((pin1 >= 6 && pin1 <= 11) && (pin2 >= 6 && pin2 <= 11)) {ESP_LOGI(TAG, "Get HW SPI"); return true;}
+	if ((pin1 == 2 || pin1 == 4 || (pin1 >= 12 && pin1 <= 15)) && 
+		(pin2 == 2 || pin2 == 4 || (pin2 >= 12 && pin2 <= 15))) {ESP_LOGI(TAG, "Get HW HSPI"); return true;}
+	if ((pin1 == 5 || (pin1 >= 18 && pin1 <= 19) || (pin1 >= 21 && pin1 <= 23)) && 
+		(pin2 == 5 || (pin2 >= 18 && pin2 <= 19) || (pin2 >= 21 && pin2 <= 23))) {ESP_LOGI(TAG, "Get HW VSPI"); return true;}
+	return false;
+}
+
+/******************************************************************************
+function:	Check Spi Mode(3 pins)
+parameter:
+    pin1    : spi pin, mosi / clk / miso
+	pin2    : spi pin, mosi / clk / miso
+	pin3    : spi pin, mosi / clk / miso
+return   : true for hardware spi, false for software spi.
+note     : ESP32 hardware spi pins: 
+	SPI: GPIO6 ~ GPIO11
+	HSPI:  GPIO2，GPIO4，GPIO12 ~ GPIO15
+	VSPI:  GPIO5，GPIO18 ~ GPIO19，GPIO21 ~ GPIO23
+******************************************************************************/
+bool LCDWIKI_SPI::is_hw_spi(int8_t pin1, int8_t pin2, int8_t pin3) {
+	// 检查是否为硬件SPI引脚（要求pin1和pin2必须是同一组硬件spi引脚）
+	if ((pin1 >= 6 && pin1 <= 11) && 
+		(pin2 >= 6 && pin2 <= 11) && 
+		(pin3 >= 6 && pin3 <= 11)) {ESP_LOGI(TAG, "Get HW SPI"); return true;}
+	if ((pin1 == 2 || pin1 == 4 || (pin1 >= 12 && pin1 <= 15)) && 
+		(pin2 == 2 || pin2 == 4 || (pin2 >= 12 && pin2 <= 15)) && 
+		(pin3 == 2 || pin3 == 4 || (pin3 >= 12 && pin3 <= 15))) {ESP_LOGI(TAG, "Get HW HSPI"); return true;}
+	if ((pin1 == 5 || (pin1 >= 18 && pin1 <= 19) || (pin1 >= 21 && pin1 <= 23)) && 
+		(pin2 == 5 || (pin2 >= 18 && pin2 <= 19) || (pin2 >= 21 && pin2 <= 23)) && 
+		(pin3 == 5 || (pin3 >= 18 && pin3 <= 19) || (pin3 >= 21 && pin3 <= 23))) {ESP_LOGI(TAG, "Get HW VSPI"); return true;}
+	return false;
+}
+
+#if !(USE_HWSPI_ONLY)
+/******************************************************************************
+function:	Constructor for software/hardware spi.
+parameter:
+    model    : such as ST7789
+	cs       : spi CS#
+	cd       : spi D/C
+	miso     : spi MISO/SDO，通常不使用，可传入-1
+	mosi     : spi MOSI/SDA
+	reset    : tft RESET#
+	clk      : spi SCLK
+	led      : tft BL
+	freq     : spi FREQ, 4000000 ~ 80000000, 传入-1将使用默认值60000000Hz
+note     : If modules is unreadable or you don't know the width and height of modules, you can use this constructor.
+         : 会依据传入的spi pin自动判断硬件/软件spi，只有使用同一spi总线指定的引脚才能构成硬件spi
+******************************************************************************/
+LCDWIKI_SPI::LCDWIKI_SPI(uint16_t model,int8_t cs, int8_t cd, int8_t miso, int8_t mosi, int8_t reset, int8_t clk, int8_t led, int32_t freq)
 {
 	_cs = cs;
 	_cd = cd;
@@ -87,8 +147,21 @@ LCDWIKI_SPI::LCDWIKI_SPI(uint16_t model,int8_t cs, int8_t cd, int8_t miso, int8_
 	_clk = clk;
 	_reset = reset;
 	_led = led;
-	hw_spi = false; //software spi
+	hw_spi = _miso == -1 ? is_hw_spi(mosi, clk) : is_hw_spi(mosi, clk, miso);
 	MODEL = model;
+	_freq = freq < 0 ? SPI_FREQ_HIGH : constrain(freq, SPI_FREQ_MIN, SPI_FREQ_MAX);
+
+	if (!hw_spi) {
+		_freq = constrain(freq, SPI_FREQ_MIN, SPI_FREQ_MID);
+		ESP_LOGW(TAG, "Spi pins(mosi、clk) are not connect to hardware spi pins, freq is limited to 27MHz");
+		ESP_LOGI(TAG, "Config software spi with %dMHz", _freq / 1000000);
+	} else {
+		if (_freq > SPI_FREQ_HIGH) {
+			ESP_LOGW(TAG, "Config hardware spi with %dMHz, please try lower FREQ if not work.", _freq / 1000000);
+		} else {
+			ESP_LOGI(TAG, "Config hardware spi with %dMHz", _freq / 1000000);
+		}
+	}
 	
 	// 配置GPIO
     gpio_config_t io_conf = {};
@@ -125,7 +198,7 @@ LCDWIKI_SPI::LCDWIKI_SPI(uint16_t model,int8_t cs, int8_t cd, int8_t miso, int8_
 
     // 配置SPI设备
     spi_device_interface_config_t devcfg = {};
-    devcfg.clock_speed_hz = 4000000;  // 4MHz（与原代码SPI_CLOCK_DIV4一致）
+    devcfg.clock_speed_hz = _freq;  // Hz
     devcfg.mode = 0;  // SPI_MODE0
     devcfg.spics_io_num = _cs;  // 使用硬件CS
     devcfg.queue_size = 7;
@@ -171,9 +244,23 @@ LCDWIKI_SPI::LCDWIKI_SPI(uint16_t model,int8_t cs, int8_t cd, int8_t miso, int8_
 	setWriteDir();
 }
 
-// Constructor for software spi.
-// if modules is readable or you know the width and height of modules,you can use this constructor.
-LCDWIKI_SPI::LCDWIKI_SPI(int16_t wid,int16_t heg,int8_t cs, int8_t cd, int8_t miso, int8_t mosi, int8_t reset, int8_t clk, int8_t led)
+/******************************************************************************
+function:	Constructor for software/hardware spi.
+parameter:
+    wid      : tft's Width
+	heg      : tft's Height
+	cs       : spi CS#
+	cd       : spi D/C
+	miso     : spi MISO/SDO，通常不使用，可传入-1
+	mosi     : spi MOSI/SDA
+	reset    : tft RESET#
+	clk      : spi SCLK
+	led      : tft BL
+	freq     : spi FREQ, 4000000 ~ 80000000, 传入-1将使用默认值60000000Hz
+note     : If modules is readable or you know the width and height of modules, you can use this constructor.
+         : 会依据传入的spi pin自动判断硬件/软件spi，只有使用同一spi总线指定的引脚才能构成硬件spi
+******************************************************************************/
+LCDWIKI_SPI::LCDWIKI_SPI(int16_t wid,int16_t heg,int8_t cs, int8_t cd, int8_t miso, int8_t mosi, int8_t reset, int8_t clk, int8_t led, int32_t freq)
 {
 	_cs = cs;
 	_cd = cd;
@@ -182,7 +269,20 @@ LCDWIKI_SPI::LCDWIKI_SPI(int16_t wid,int16_t heg,int8_t cs, int8_t cd, int8_t mi
 	_clk = clk;
 	_reset = reset;
 	_led = led;
-	hw_spi = false; //software spi
+	hw_spi = _miso == -1 ? is_hw_spi(mosi, clk) : is_hw_spi(mosi, clk, miso);
+	_freq = freq < 0 ? SPI_FREQ_HIGH : constrain(freq, SPI_FREQ_MIN, SPI_FREQ_MAX);
+
+	if (!hw_spi) {
+		_freq = constrain(freq, SPI_FREQ_MIN, SPI_FREQ_MID);
+		ESP_LOGW(TAG, "Spi pins(mosi、clk) are not connect to hardware spi pins, freq is limited to 27MHz");
+		ESP_LOGI(TAG, "Config software spi with %dMHz", _freq / 1000000);
+	} else {
+		if (_freq > SPI_FREQ_HIGH) {
+			ESP_LOGW(TAG, "Config hardware spi with %dMHz, please try lower FREQ if not work.", _freq / 1000000);
+		} else {
+			ESP_LOGI(TAG, "Config hardware spi with %dMHz", _freq / 1000000);
+		}
+	}
 
 	// 配置GPIO
     gpio_config_t io_conf = {};
@@ -219,7 +319,7 @@ LCDWIKI_SPI::LCDWIKI_SPI(int16_t wid,int16_t heg,int8_t cs, int8_t cd, int8_t mi
 
     // 配置SPI设备
     spi_device_interface_config_t devcfg = {};
-    devcfg.clock_speed_hz = 4000000;  // 4MHz（与原代码SPI_CLOCK_DIV4一致）
+    devcfg.clock_speed_hz = _freq;  // Hz
     devcfg.mode = 0;  // SPI_MODE0
     devcfg.spics_io_num = _cs;  // 使用硬件CS
     devcfg.queue_size = 7;
@@ -241,9 +341,19 @@ LCDWIKI_SPI::LCDWIKI_SPI(int16_t wid,int16_t heg,int8_t cs, int8_t cd, int8_t mi
 }
 #endif
 
-// Constructor for hardware spi.
-// if modules is unreadable or you don't know the width and height of modules,you can use this constructor.
-LCDWIKI_SPI::LCDWIKI_SPI(uint16_t model,int8_t cs, int8_t cd, int8_t reset, int8_t led)
+/******************************************************************************
+function:	Constructor only for hardware spi(VSPI).
+parameter:
+    model    : such as ST7789
+	cs       : spi CS#
+	cd       : spi D/C
+	reset    : tft RESET#
+	led      : tft BL
+	freq     : spi FREQ, 4000000 ~ 80000000, 传入-1将使用默认值60000000Hz
+note     : If modules is unreadable or you don't know the width and height of modules, you can use this constructor.
+         : 默认使用VSPI
+******************************************************************************/
+LCDWIKI_SPI::LCDWIKI_SPI(uint16_t model,int8_t cs, int8_t cd, int8_t reset, int8_t led, int32_t freq)
 {
 	_cs = cs;
 	_cd = cd;
@@ -254,6 +364,13 @@ LCDWIKI_SPI::LCDWIKI_SPI(uint16_t model,int8_t cs, int8_t cd, int8_t reset, int8
 	_led = led;
 	hw_spi = true; //hardware spi
 	MODEL = model;
+	_freq = freq < 0 ? SPI_FREQ_HIGH : constrain(freq, SPI_FREQ_MIN, SPI_FREQ_MAX);
+
+	if (_freq > SPI_FREQ_HIGH) {
+		ESP_LOGW(TAG, "Config hardware spi with %dMHz, please try lower FREQ if not work.", _freq / 1000000);
+	} else {
+		ESP_LOGI(TAG, "Config hardware spi with %dMHz", _freq / 1000000);
+	}
 
 	// 配置GPIO
     gpio_config_t io_conf = {};
@@ -290,7 +407,7 @@ LCDWIKI_SPI::LCDWIKI_SPI(uint16_t model,int8_t cs, int8_t cd, int8_t reset, int8
 
     // 配置SPI设备
     spi_device_interface_config_t devcfg = {};
-    devcfg.clock_speed_hz = 4000000;  // 4MHz（与原代码SPI_CLOCK_DIV4一致）
+    devcfg.clock_speed_hz = _freq;  // Hz
     devcfg.mode = 0;  // SPI_MODE0
     devcfg.spics_io_num = _cs;  // 使用硬件CS
     devcfg.queue_size = 7;
@@ -336,9 +453,20 @@ LCDWIKI_SPI::LCDWIKI_SPI(uint16_t model,int8_t cs, int8_t cd, int8_t reset, int8
 	setWriteDir();
 }
 
-// Constructor for hardware spi.
-// if modules is readable or you know the width and height of modules,you can use this constructor.
-LCDWIKI_SPI::LCDWIKI_SPI(int16_t wid,int16_t heg,int8_t cs, int8_t cd, int8_t reset,int8_t led)
+/******************************************************************************
+function:	Constructor only for hardware spi(VSPI).
+parameter:
+    wid      : tft's Width
+	heg      : tft's Height
+	cs       : spi CS#
+	cd       : spi D/C
+	reset    : tft RESET#
+	led      : tft BL
+	freq     : spi FREQ, 4000000 ~ 80000000, 传入-1将使用默认值60000000Hz
+note     : If modules is readable or you know the width and height of modules, you can use this constructor.
+         : 默认使用VSPI
+******************************************************************************/
+LCDWIKI_SPI::LCDWIKI_SPI(int16_t wid,int16_t heg,int8_t cs, int8_t cd, int8_t reset,int8_t led, int32_t freq)
 {
 	_cs = cs;
 	_cd = cd;
@@ -348,6 +476,13 @@ LCDWIKI_SPI::LCDWIKI_SPI(int16_t wid,int16_t heg,int8_t cs, int8_t cd, int8_t re
 	_reset = reset;
 	_led = led;
 	hw_spi = true; //hardware spi
+	_freq = freq < 0 ? SPI_FREQ_HIGH : constrain(freq, SPI_FREQ_MIN, SPI_FREQ_MAX);
+
+	if (_freq > SPI_FREQ_HIGH) {
+		ESP_LOGW(TAG, "Config hardware spi with %dMHz, please try lower FREQ if not work.", _freq / 1000000);
+	} else {
+		ESP_LOGI(TAG, "Config hardware spi with %dMHz", _freq / 1000000);
+	}
 
 	// 配置GPIO
     gpio_config_t io_conf = {};
@@ -384,7 +519,7 @@ LCDWIKI_SPI::LCDWIKI_SPI(int16_t wid,int16_t heg,int8_t cs, int8_t cd, int8_t re
 
     // 配置SPI设备
     spi_device_interface_config_t devcfg = {};
-    devcfg.clock_speed_hz = 4000000;  // 4MHz（与原代码SPI_CLOCK_DIV4一致）
+    devcfg.clock_speed_hz = _freq;  // Hz
     devcfg.mode = 0;  // SPI_MODE0
     devcfg.spics_io_num = _cs;  // 使用硬件CS
     devcfg.queue_size = 7;

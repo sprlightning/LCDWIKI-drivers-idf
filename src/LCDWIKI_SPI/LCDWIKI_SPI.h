@@ -65,10 +65,15 @@ typedef struct _lcd_info
 class LCDWIKI_SPI:public LCDWIKI_GUI
 {
 	public:
-	LCDWIKI_SPI(uint16_t model,int8_t cs, int8_t cd, int8_t miso, int8_t mosi, int8_t reset, int8_t clk, int8_t led);
-	LCDWIKI_SPI(uint16_t model,int8_t cs, int8_t cd, int8_t reset,int8_t led);
-	LCDWIKI_SPI(int16_t wid,int16_t heg,int8_t cs, int8_t cd, int8_t miso, int8_t mosi, int8_t reset, int8_t clk,int8_t led);
-	LCDWIKI_SPI(int16_t wid,int16_t heg,int8_t cs, int8_t cd, int8_t reset,int8_t led);
+	#ifndef spi_dev
+	spi_device_handle_t spi_dev;  // 初始化SPI设备句柄
+	#else 
+	extern spi_device_handle_t spi_dev;  // 声明SPI设备句柄
+	#endif
+	LCDWIKI_SPI(uint16_t model,int8_t cs, int8_t cd, int8_t miso, int8_t mosi, int8_t reset, int8_t clk, int8_t led, int32_t freq);
+	LCDWIKI_SPI(int16_t wid,int16_t heg,int8_t cs, int8_t cd, int8_t miso, int8_t mosi, int8_t reset, int8_t clk,int8_t led, int32_t freq);
+	LCDWIKI_SPI(uint16_t model,int8_t cs, int8_t cd, int8_t reset,int8_t led, int32_t freq);
+	LCDWIKI_SPI(int16_t wid,int16_t heg,int8_t cs, int8_t cd, int8_t reset,int8_t led, int32_t freq);
 	void Init_LCD(void);
 	void reset(void);
 	void start(uint16_t ID);
@@ -104,13 +109,23 @@ class LCDWIKI_SPI:public LCDWIKI_GUI
 	uint8_t xoffset,yoffset;
     uint16_t WIDTH,HEIGHT,width, height, rotation,lcd_driver,lcd_model;
 	bool hw_spi;
+	bool is_hw_spi(int8_t pin1, int8_t pin2);
+	bool is_hw_spi(int8_t pin1, int8_t pin2, int8_t pin3);
+
 	private:
-	spi_device_handle_t spi_dev;  // SPI设备句柄
 	uint16_t XC,YC,CC,RC,SC1,SC2,MD,VL,R24BIT,MODEL;
+	#define constrain(amt, low, high) ((amt) < (low) ? (low) : ((amt) > (high) ? (high) : (amt)))
+
+	#define SPI_FREQ_MIN  (4000000)  // 最小值，适合通信恶劣情况
+	#define SPI_FREQ_LOW  (10000000) // 低速，适合大多数情况
+	#define SPI_FREQ_MID  (27000000) // 常规速度，软件spi最大值
+	#define SPI_FREQ_HIGH (60000000) // 高速，实测硬件spi（VSPI）支持的最大值
+	#define SPI_FREQ_MAX  (80000000) // 最大值，硬件spi理论值
  
 	volatile uint8_t *spicsPort, *spicdPort, *spimisoPort , *spimosiPort, *spiclkPort;
 			uint8_t  spicsPinSet, spicdPinSet  ,spimisoPinSet , spimosiPinSet , spiclkPinSet,
 					spicsPinUnset, spicdPinUnset, spimisoPinUnset,  spimosiPinUnset,spiclkPinUnset;
 			int8_t   _cs,_cd,_miso,_mosi,_clk,_reset,_led;
+			uint32_t _freq;
 };
 #endif
