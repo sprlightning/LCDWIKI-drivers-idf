@@ -53,6 +53,107 @@ Place the LCDWIKI_SPI library folder your <arduinosketchfolder>/libraries/ folde
 ### Step 3
 
 参考demo的ino文件，将其所用的头文件放到到你的main.cpp中，demo的setup()的内容放到main.cpp的app_main()中即可，如果loop()有内容，那就创建一个task()，把loop()的内容放到task()里，并在app_main()末尾调用启动任务调度器启动此task()即可。
+下面是demo display_string在main.cpp的使用示例：
+```cpp
+/*
+ * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: CC0-1.0
+ */
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_task_wdt.h"
+#include "driver/gpio.h"
+
+// tft
+#include <LCDWIKI_GUI.h> //Core graphics library
+#include <LCDWIKI_SPI.h> //Hardware-specific library
+
+//paramters define
+#define MODEL ST7789
+#define CS   27    
+#define CD   14
+#define RST  12
+#define SDA  23
+#define SCK  18
+#define LED  13   //if you don't need to control the LED pin,you should set it to -1 and set it to 3.3V
+
+//the definiens of software spi mode as follow:
+//if the IC model is known or the modules is unreadable,you can use this constructed function
+// LCDWIKI_SPI mylcd(MODEL,CS,CD,-1,SDA,RST,SCK,LED); //model,cs,dc,sdo,sda,reset,sck,led
+LCDWIKI_SPI mylcd(MODEL, CS, CD, RST, LED); // hardware spi
+
+#define BLACK   0x0000
+#define BLUE    0x001F
+#define RED     0xF800
+#define GREEN   0x07E0
+#define CYAN    0x07FF
+#define MAGENTA 0xF81F
+#define YELLOW  0xFFE0
+#define WHITE   0xFFFF
+
+// tft_test_task
+void tft_test_task(void *pvParameters) {
+  //
+  while (1) {
+    mylcd.Set_Text_Mode(0);
+  
+    mylcd.Fill_Screen(0x0000);
+    mylcd.Set_Text_colour(RED);
+    mylcd.Set_Text_Back_colour(BLACK);
+    mylcd.Set_Text_Size(1);
+    mylcd.Print_String("Hello World!", 0, 0);
+    mylcd.Print_Number_Float(1234.56, 2, 0, 8, '.', 0, ' ');  
+    mylcd.Print_Number_Int(0xDEADBEF, 0, 16, 0, ' ',16);
+
+    mylcd.Set_Text_colour(GREEN);
+    mylcd.Set_Text_Size(2);
+    mylcd.Print_String("Hello", 0, 28);
+    mylcd.Print_Number_Float(1234.56, 2, 0, 44, '.', 0, ' ');  
+    mylcd.Print_Number_Int(0xDEADBEF, 0, 60, 0, ' ',16);
+
+    mylcd.Set_Text_colour(BLUE);
+    mylcd.Set_Text_Size(3);
+    mylcd.Print_String("Hello", 0, 80);
+    mylcd.Print_Number_Float(1234.56, 2, 0, 104, '.', 0, ' ');  
+    mylcd.Print_Number_Int(0xDEADBEF, 0, 128, 0, ' ',16);
+
+    delay(3000);
+  }
+}
+
+
+extern "C" void app_main(void)
+{
+    //  ____  ____ ___   _     ____ ____    _____         _
+    // / ___||  _ \_ _| | |   / ___|  _ \  |_   _|__  ___| |_
+    // \___ \| |_) | |  | |  | |   | | | |   | |/ _ \/ __| __|
+    //  ___) |  __/| |  | |__| |___| |_| |   | |  __/\__ \ |_
+    // |____/|_|  |___| |_____\____|____/    |_|\___||___/\__|
+    printf(" ____  ____ ___   _     ____ ____    _____         _\r\n");
+    printf("/ ___||  _ \\_ _| | |   / ___|  _ \\  |_   _|__  ___| |_\r\n");
+    printf("\\___ \\| |_) | |  | |  | |   | | | |   | |/ _ \\/ __| __|\r\n");
+    printf(" ___) |  __/| |  | |__| |___| |_| |   | |  __/\\__ \\ |_\r\n");
+    printf("|____/|_|  |___| |_____\\____|____/    |_|\\___||___/\\__|\r\n");
+    
+    // 关闭看门狗，避免测试过程中复位
+    esp_task_wdt_deinit();
+    
+    // 初始化
+    mylcd.Init_LCD();
+    mylcd.Fill_Screen(BLACK); 
+
+    xTaskCreatePinnedToCore(tft_test_task, "tft_test_task", 4096, NULL, 10, NULL, 1);
+    
+    // 测试完成后挂起，避免程序退出
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+
+}
+
+```
 
 ### 注意事项
 
