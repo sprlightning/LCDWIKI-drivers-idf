@@ -3,8 +3,8 @@
 # -- copyright GPLv3
 
 idf_component_register(
-    SRC_DIRS LCDWIKI_GUI LCDWIKI_SPI Fonts
-    INCLUDE_DIRS "." LCDWIKI_GUI LCDWIKI_SPI Fonts
+    SRC_DIRS src src/LCDWIKI_GUI src/LCDWIKI_SPI src/Fonts
+    INCLUDE_DIRS src src/LCDWIKI_GUI src/LCDWIKI_SPI src/Fonts
     REQUIRES esp_common freertos hal log nvs_flash driver esp_timer arduino-audio-tools
 )
 
