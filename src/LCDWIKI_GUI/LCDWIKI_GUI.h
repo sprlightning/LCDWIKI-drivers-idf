@@ -34,7 +34,7 @@
 enum Color {
 	BLACK   = 0x0000, // 黑色
 	BLUE    = 0x001F, // 蓝色
-	RED     = 0xF800, // 黑色
+	RED     = 0xF800, // 红色
 	GREEN   = 0x07E0, // 绿色
 	CYAN    = 0x07FF, // 青色
 	MAGENTA = 0xF81F, // 品红

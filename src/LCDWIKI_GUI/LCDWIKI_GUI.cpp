@@ -27,11 +27,11 @@ MIT License
 //Constructor to set text color 
 LCDWIKI_GUI::LCDWIKI_GUI(void)
 {
-	text_bgcolor = 0xF800; //default red
-	text_color = 0x07E0; //default green
-	draw_color = 0xF800; //default red
-	text_size = 1;
-	text_mode = 0;
+	text_bgcolor = RED;  // default RED
+	text_color = GREEN;  // default GREEN
+	draw_color = RED;    // default RED
+	text_size = 1;       // default 1
+	text_mode = 0;       // default 0
 }
 
 //set 16bits draw color
@@ -545,8 +545,8 @@ function:	Set Text Mode
 parameter:
     mode           ：Text Mode
 note     : if set, text_bgcolor is invalid
-         : 0，字符背景色有效
-         : 1，字符背景色无效
+         : 0，字符背景色有效，显示较慢
+         : 1，字符背景色无效，显示较快
 ******************************************************************************/
 void LCDWIKI_GUI::Set_Text_Mode(bool mode)
 {
