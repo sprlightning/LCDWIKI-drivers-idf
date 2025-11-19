@@ -80,12 +80,13 @@ Place the LCDWIKI_SPI library folder your <arduinosketchfolder>/libraries/ folde
 #define RST  12
 #define SDA  23
 #define SCK  18
-#define LED  13   //if you don't need to control the LED pin,you should set it to -1 and set it to 3.3V
+#define LED  13   // If you don't need to control the LED pin,you should set it to -1 and set it to 3.3V
+#define FREQ -1   // FREQ support 4000000 ~ 80000000Hz, suggest no more than 60000000, set -1 to use default FREQ
 
 //the definiens of software spi mode as follow:
 //if the IC model is known or the modules is unreadable,you can use this constructed function
-// LCDWIKI_SPI mylcd(MODEL,CS,CD,-1,SDA,RST,SCK,LED); //model,cs,dc,sdo,sda,reset,sck,led
-LCDWIKI_SPI mylcd(MODEL, CS, CD, RST, LED); // hardware spi
+LCDWIKI_SPI mylcd(MODEL,CS,CD,-1,SDA,RST,SCK,LED,FREQ); // model,cs,dc,sdo,sda,reset,sck,led,freq
+// LCDWIKI_SPI mylcd(MODEL, CS, CD, RST, LED, FREQ); // model,cs,dc,reset,led,freq
 
 // tft_test_task
 void tft_test_task(void *pvParameters) {
@@ -116,7 +117,7 @@ void tft_test_task(void *pvParameters) {
     mylcd.Print_Number_Int(0xDEADBEF, 0, 128, 0, ' ',16);
 
     mylcd.Print_String_EN(0, 160, "Hello World!", &Font12, CYAN, WHITE);
-    mylcd.Print_String_CN(0, 180, "木炉星TFT测试123", &Font12CJK_B, MAGENTA, WHITE);
+    mylcd.Print_String_CN(0, 180, "木炉星MLXmlx123", &Font12CJK_B, MAGENTA, WHITE);
 
     delay(3000);
   }
