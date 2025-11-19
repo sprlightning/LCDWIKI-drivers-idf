@@ -58,6 +58,11 @@ void LCDWIKI_GUI::Draw_Pixel(int16_t x, int16_t y)
 	Draw_Pixe(x, y, draw_color);
 }
 
+void LCDWIKI_GUI::Draw_Pixel(int16_t x, int16_t y, int16_t draw_color)
+{
+	Draw_Pixe(x, y, draw_color);
+}
+
 //read color data for point(x,y)
 uint16_t LCDWIKI_GUI::Read_Pixel(int16_t x, int16_t y)
 {
@@ -547,7 +552,7 @@ bool LCDWIKI_GUI::Get_Text_Mode(void) const
 	return text_mode;
 }
 
-//draw a char
+//draw a char - 默认使用lcd_font字库
 void LCDWIKI_GUI::Draw_Char(int16_t x, int16_t y, uint8_t c, uint16_t color,uint16_t bg, uint8_t size, bool mode)
 {
 	if((x >= Get_Width()) || (y >= Get_Height()) || ((x + 6 * size - 1) < 0) || ((y + 8 * size - 1) < 0))
@@ -657,6 +662,197 @@ void LCDWIKI_GUI::Print_String(uint8_t *st, int16_t x, int16_t y)
 void LCDWIKI_GUI::Print_String(const char* st, int16_t x, int16_t y)
 {
 	Print((uint8_t *)st, x, y);
+}
+
+/******************************************************************************
+function: Show English characters
+parameter:
+    Xpoint           ：X coordinate
+    Ypoint           ：Y coordinate
+    Acsii_Char       ：To display the English characters
+    Font             ：A structure pointer that displays a character size
+    Color_Foreground : Select the foreground color
+    Color_Background : Select the background color
+******************************************************************************/
+void LCDWIKI_GUI::Draw_Char(int16_t Xpoint, int16_t Ypoint, const char Acsii_Char,
+                    sFONT* Font, int16_t Color_Foreground, int16_t Color_Background)
+{
+    int16_t Page, Column;
+
+    if (Xpoint > Get_Width() || Ypoint > Get_Height()) {
+        printf("Paint_DrawChar Input exceeds the normal display range\r\n");
+        return;
+    }
+
+    uint32_t Char_Offset = (Acsii_Char - ' ') * Font->Height * (Font->Width / 8 + (Font->Width % 8 ? 1 : 0));
+    const unsigned char *ptr = &Font->table[Char_Offset];
+
+    for (Page = 0; Page < Font->Height; Page ++ ) {
+        for (Column = 0; Column < Font->Width; Column ++ ) {
+
+            //To determine whether the font background color and screen background color is consistent
+            if (FONT_BACKGROUND == Color_Background) { //this process is to speed up the scan
+                if (*ptr & (0x80 >> (Column % 8)))
+                    Draw_Pixel(Xpoint + Column, Ypoint + Page, Color_Foreground);
+                    // Paint_DrawPoint(Xpoint + Column, Ypoint + Page, Color_Foreground, DOT_PIXEL_DFT, DOT_STYLE_DFT);
+            } else {
+                if (*ptr & (0x80 >> (Column % 8))) {
+                    Draw_Pixel(Xpoint + Column, Ypoint + Page, Color_Foreground);
+                    // Paint_DrawPoint(Xpoint + Column, Ypoint + Page, Color_Foreground, DOT_PIXEL_DFT, DOT_STYLE_DFT);
+                } else {
+                    Draw_Pixel(Xpoint + Column, Ypoint + Page, Color_Background);
+                    // Paint_DrawPoint(Xpoint + Column, Ypoint + Page, Color_Background, DOT_PIXEL_DFT, DOT_STYLE_DFT);
+                }
+            }
+            //One pixel is 8 bits
+            if (Column % 8 == 7)
+                ptr++;
+        }// Write a line
+        if (Font->Width % 8 != 0)
+            ptr++;
+    }// Write all
+}
+
+/******************************************************************************
+function:	Display the string
+parameter:
+    Xstart           ：X coordinate
+    Ystart           ：Y coordinate
+    pString          ：The first address of the English string to be displayed
+    Font             ：A structure pointer that displays a character size
+    Color_Foreground : Select the foreground color
+    Color_Background : Select the background color
+******************************************************************************/
+void LCDWIKI_GUI::Print_String_EN(int16_t Xstart, int16_t Ystart, const char * pString,
+                         sFONT* Font, int16_t Color_Foreground, int16_t Color_Background)
+{
+    int16_t Xpoint = Xstart;
+    int16_t Ypoint = Ystart;
+
+    if (Xstart > Get_Width() || Ystart > Get_Height()) {
+        printf("Paint_DrawString_EN Input exceeds the normal display range\r\n");
+        return;
+    }
+
+    while (* pString != '\0') {
+        //if X direction filled , reposition to(Xstart,Ypoint),Ypoint is Y direction plus the Height of the character
+        if ((Xpoint + Font->Width ) > Get_Width() ) {
+            Xpoint = Xstart;
+            Ypoint += Font->Height;
+        }
+
+        // If the Y direction is full, reposition to(Xstart, Ystart)
+        if ((Ypoint  + Font->Height ) > Get_Height() ) {
+            Xpoint = Xstart;
+            Ypoint = Ystart;
+        }
+        // 绘制英文字符
+        Draw_Char(Xpoint, Ypoint, * pString, Font, Color_Foreground, Color_Background);
+
+        //The next character of the address
+        pString ++;
+
+        //The next word of the abscissa increases the font of the broadband
+        Xpoint += Font->Width;
+    }
+}
+
+/******************************************************************************
+function: Display the string
+parameter:
+    Xstart  ：X coordinate
+    Ystart  ：Y coordinate
+    pString ：The first address of the Chinese string and English
+              string to be displayed
+    Font    ：A structure pointer that displays a character size
+    Color_Foreground : Select the foreground color
+    Color_Background : Select the background color
+******************************************************************************/
+void LCDWIKI_GUI::Print_String_CN(int16_t Xstart, int16_t Ystart, const char * pString, cFONT* font,
+                        int16_t Color_Foreground, int16_t Color_Background)
+{
+    const char* p_text = pString;
+    int x = Xstart, y = Ystart;
+    int i, j,Num;
+
+    /* Send the string character by character on EPD */
+    while (*p_text != 0) {
+        if(*p_text <= 0x7F) {  //ASCII < 126
+            for(Num = 0; Num < font->size; Num++) {
+                if(*p_text== font->table[Num].index[0]) {
+                    const char* ptr = &font->table[Num].matrix[0];
+
+                    for (j = 0; j < font->Height; j++) {
+                        for (i = 0; i < font->Width; i++) {
+                            if (FONT_BACKGROUND == Color_Background) { //this process is to speed up the scan
+                                if (*ptr & (0x80 >> (i % 8))) {
+                                    Draw_Pixel(x + i, y + j, Color_Foreground);
+                                    // Paint_DrawPoint(x + i, y + j, Color_Foreground, DOT_PIXEL_DFT, DOT_STYLE_DFT);
+                                }
+                            } else {
+                                if (*ptr & (0x80 >> (i % 8))) {
+                                    Draw_Pixel(x + i, y + j, Color_Foreground);
+                                    // Paint_DrawPoint(x + i, y + j, Color_Foreground, DOT_PIXEL_DFT, DOT_STYLE_DFT);
+                                } else {
+                                    Draw_Pixel(x + i, y + j, Color_Background);
+                                    // Paint_DrawPoint(x + i, y + j, Color_Background, DOT_PIXEL_DFT, DOT_STYLE_DFT);
+                                }
+                            }
+                            if (i % 8 == 7) {
+                                ptr++;
+                            }
+                        }
+                        if (font->Width % 8 != 0) {
+                            ptr++;
+                        }
+                    }
+                    break;
+                }
+            }
+            /* Point on the next character */
+            p_text += 1;
+            /* Decrement the column position by 16 */
+            x += font->ASCII_Width;
+        } else {        //Chinese
+            for(Num = 0; Num < font->size; Num++) {
+                if ((*p_text == font->table[Num].index[0]) && \
+                    (*(p_text + 1) == font->table[Num].index[1]) && \
+                    (*(p_text + 2) == font->table[Num].index[2])) {
+                    const char* ptr = &font->table[Num].matrix[0];
+
+                    for (j = 0; j < font->Height; j++) {
+                        for (i = 0; i < font->Width; i++) {
+                            if (FONT_BACKGROUND == Color_Background) { //this process is to speed up the scan
+                                if (*ptr & (0x80 >> (i % 8))) {
+                                    Draw_Pixel(x + i, y + j, Color_Foreground);
+                                    // Paint_DrawPoint(x + i, y + j, Color_Foreground, DOT_PIXEL_DFT, DOT_STYLE_DFT);
+                                }
+                            } else {
+                                if (*ptr & (0x80 >> (i % 8))) {
+                                    Draw_Pixel(x + i, y + j, Color_Foreground);
+                                    // Paint_DrawPoint(x + i, y + j, Color_Foreground, DOT_PIXEL_DFT, DOT_STYLE_DFT);
+                                } else {
+                                    Draw_Pixel(x + i, y + j, Color_Background);
+                                    // Paint_DrawPoint(x + i, y + j, Color_Background, DOT_PIXEL_DFT, DOT_STYLE_DFT);
+                                }
+                            }
+                            if (i % 8 == 7) {
+                                ptr++;
+                            }
+                        }
+                        if (font->Width % 8 != 0) {
+                            ptr++;
+                        }
+                    }
+                    break;
+                }
+            }
+            /* Point on the next character */
+            p_text += 3;
+            /* Decrement the column position by 16 */
+            x += font->Width;
+        }
+    }
 }
 
 //print int number
