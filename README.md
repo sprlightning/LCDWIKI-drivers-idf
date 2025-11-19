@@ -59,6 +59,9 @@ Place the LCDWIKI_SPI library folder your <arduinosketchfolder>/libraries/ folde
  * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: CC0-1.0
+ * 
+ * 屏幕驱动：https://github.com/sprlightning/LCDWIKI-drivers-idf
+ * 触屏驱动：https://github.com/sprlightning/mlx-ft6336-drivers
  */
 
 #include "freertos/FreeRTOS.h"
@@ -84,24 +87,17 @@ Place the LCDWIKI_SPI library folder your <arduinosketchfolder>/libraries/ folde
 // LCDWIKI_SPI mylcd(MODEL,CS,CD,-1,SDA,RST,SCK,LED); //model,cs,dc,sdo,sda,reset,sck,led
 LCDWIKI_SPI mylcd(MODEL, CS, CD, RST, LED); // hardware spi
 
-#define BLACK   0x0000
-#define BLUE    0x001F
-#define RED     0xF800
-#define GREEN   0x07E0
-#define CYAN    0x07FF
-#define MAGENTA 0xF81F
-#define YELLOW  0xFFE0
-#define WHITE   0xFFFF
-
 // tft_test_task
 void tft_test_task(void *pvParameters) {
   //
   while (1) {
     mylcd.Set_Text_Mode(0);
+
+    mylcd.Set_Rotation(3);
   
-    mylcd.Fill_Screen(0x0000);
+    mylcd.Fill_Screen(WHITE);
     mylcd.Set_Text_colour(RED);
-    mylcd.Set_Text_Back_colour(BLACK);
+    mylcd.Set_Text_Back_colour(WHITE);
     mylcd.Set_Text_Size(1);
     mylcd.Print_String("Hello World!", 0, 0);
     mylcd.Print_Number_Float(1234.56, 2, 0, 8, '.', 0, ' ');  
@@ -118,6 +114,9 @@ void tft_test_task(void *pvParameters) {
     mylcd.Print_String("Hello", 0, 80);
     mylcd.Print_Number_Float(1234.56, 2, 0, 104, '.', 0, ' ');  
     mylcd.Print_Number_Int(0xDEADBEF, 0, 128, 0, ' ',16);
+
+    mylcd.Print_String_EN(0, 160, "Hello World!", &Font12, CYAN, WHITE);
+    mylcd.Print_String_CN(0, 180, "木炉星TFT测试123", &Font12CJK_B, MAGENTA, WHITE);
 
     delay(3000);
   }
@@ -168,7 +167,17 @@ LCDWIKI_SPI定义了多组函数，分软件SPI（8个参数）和硬件SPI（5�
 
 ## 字体
 
-目前使用的是LCDWIKI_GUI的默认字体，等我后续更新；
+我在src/Fonts目录中增加了CJK字体，适用于大多数使用场景，可用**Print_String_CN**函数绘制；
+
+使用STC-ISP的字库生成工具制作，水平扫描，从左到右从上到下，高位在前；
+
+其中**Font12CJK**使用新宋体，12号，常规；点阵宽x高=16x21，字体宽x高=16x16；水平调整0，垂直调整2；
+
+**Font12CJK_B**使用新宋体，12号，粗体；点阵宽x高=16x21，字体宽x高=16x16；水平调整0，垂直调整2；
+
+值得注意的是，字库占用空间较大，可能单个CJK就需要1MB空间，为此可参考我提供的**music_fonts_cjk.txt**按照**stc_isp_char_config.ini**定义的规则生成字库bin文件放在独立的flash中；或者确保ESP32 Flash的factory分区有足够的空间存放带字库的ESP32 Image，这通常意味着需要4MB及以上的ESP32 Flash；
+
+SIC-ISP工具位于extras/Font-tools目录，版本6.96A，来自STC官网；解压后运行，其菜单的工具选项可看到“字库生成工具”。
 
 ## FT6336触摸驱动
 
