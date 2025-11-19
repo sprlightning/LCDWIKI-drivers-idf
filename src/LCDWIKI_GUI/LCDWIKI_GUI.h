@@ -22,9 +22,29 @@
 //#include <avr/dtostrf.h>
 //#endif
 
+#include "fonts.h"
+
 #define LEFT 0
 #define RIGHT 9999
 #define CENTER 9998
+
+/**
+ * image color
+**/
+enum Color {
+	BLACK   = 0x0000, // 黑色
+	BLUE    = 0x001F, // 蓝色
+	RED     = 0xF800, // 黑色
+	GREEN   = 0x07E0, // 绿色
+	CYAN    = 0x07FF, // 青色
+	MAGENTA = 0xF81F, // 品红
+	YELLOW  = 0xFFE0, // 黄色
+	WHITE   = 0xFFFF, // 白色
+};
+
+#define IMAGE_BACKGROUND    WHITE
+#define FONT_FOREGROUND     BLACK
+#define FONT_BACKGROUND     WHITE
 
 class LCDWIKI_GUI
 {
@@ -46,6 +66,7 @@ class LCDWIKI_GUI
 	void Set_Draw_color(uint8_t r, uint8_t g, uint8_t b);
 	uint16_t Get_Draw_color(void) const;
 	void Draw_Pixel(int16_t x, int16_t y);
+	void Draw_Pixel(int16_t x, int16_t y, int16_t draw_color);
 	uint16_t Read_Pixel(int16_t x, int16_t y);
 	void Draw_Fast_VLine(int16_t x, int16_t y, int16_t h);
 	void Draw_Fast_HLine(int16_t x, int16_t y, int16_t w);
@@ -80,6 +101,12 @@ class LCDWIKI_GUI
 	void Print_String(const uint8_t *st, int16_t x, int16_t y);
 	void Print_String(uint8_t *st, int16_t x, int16_t y);
 	void Print_String(const char* st, int16_t x, int16_t y);
+	void Draw_Char(int16_t Xpoint, int16_t Ypoint, const char Acsii_Char,
+                    sFONT* Font, int16_t Color_Foreground, int16_t Color_Background);
+	void Print_String_EN(int16_t Xstart, int16_t Ystart, const char * pString,
+                         sFONT* Font, int16_t Color_Foreground, int16_t Color_Background);
+	void Print_String_CN(int16_t Xstart, int16_t Ystart, const char * pString, cFONT* font,
+                        int16_t Color_Foreground, int16_t Color_Background);
 	void Print_Number_Int(long num, int16_t x, int16_t y, int16_t length, uint8_t filler, int16_t system);
 	void Print_Number_Float(double num, uint8_t dec, int16_t x, int16_t y, uint8_t divider, int16_t length, uint8_t filler);
     void Draw_Char(int16_t x, int16_t y, uint8_t c, uint16_t color,uint16_t bg, uint8_t size, bool mode);
