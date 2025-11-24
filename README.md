@@ -7,7 +7,7 @@ This is a library for the SPI lcd(TFT) display. Include LCDWIKI_SPI & LCDWIKI_GU
 
 LCDWIKI_SPI的官方开源地址是：[LCDWIKI_SPI](https://github.com/lcdwiki/LCDWIKI_SPI) ，仅支持Arduino IDE；LCDWIKI_GUI的官方开源地址是：[LCDWIKI_GUI](https://github.com/lcdwiki/LCDWIKI_gui) ，仅支持Arduino IDE;
 
-我对LCDWIKI_SPI和LCDWIKI_GUI进行了移植，使其支持ESP-IDF 5.1.4以及ESP32，并补充了他们的examples；我使用深圳秦唐盛世科技的2.0寸屏幕（ST7789V+CST8160，240x320 IPS）进行了demo测试，就效果良好；其中库和demo使用方法见下方“基本使用”所介绍。
+我对LCDWIKI_SPI和LCDWIKI_GUI进行了移植，使其支持ESP-IDF 5.1.4以及ESP32，并补充了他们的examples；我使用深圳秦唐盛世科技的2.0寸屏幕（ST7789V+CST8160，240x320 IPS）进行了demo测试，显示正常，但是屏幕刷新慢；其中库和demo使用方法见下方“基本使用”所介绍。
 
 This library support these lcd controller:
 - ILI9325 
